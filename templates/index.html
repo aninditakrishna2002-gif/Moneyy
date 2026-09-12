@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MONEYY — Your money. Your choices.</title>
+  <!-- Google Fonts: Plus Jakarta Sans for clean Gen-Z typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+  <!-- Global App Shell -->
+  <div class="app-shell">
+
+    <!-- Top Navigation Header -->
+    <header class="top-nav">
+      <div class="nav-brand-container">
+        <div class="brand-logo" id="logo-home-btn" role="button" tabindex="0">
+          <div class="brand-icon">💸</div>
+          <div class="brand-info">
+            <span class="brand-name">MONEYY</span>
+            <span class="brand-tagline">Your money. Your choices.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs (Desktop) -->
+      <nav class="nav-tabs" role="tablist">
+        <button class="nav-tab active" data-tab="dashboard" role="tab" aria-selected="true">
+          <span class="tab-icon">🏠</span>
+          <span class="tab-label">Dashboard</span>
+        </button>
+        <button class="nav-tab" data-tab="transactions" role="tab" aria-selected="false">
+          <span class="tab-icon">💳</span>
+          <span class="tab-label">Transactions</span>
+        </button>
+        <button class="nav-tab" data-tab="budgets" role="tab" aria-selected="false">
+          <span class="tab-icon">📊</span>
+          <span class="tab-label">Budgets</span>
+        </button>
+        <button class="nav-tab" data-tab="goals" role="tab" aria-selected="false">
+          <span class="tab-icon">🎯</span>
+          <span class="tab-label">Savings Goals</span>
+        </button>
+        <button class="nav-tab" data-tab="insights" role="tab" aria-selected="false">
+          <span class="tab-icon">💡</span>
+          <span class="tab-label">Insights</span>
+        </button>
+        <button class="nav-tab" data-tab="afford" role="tab" aria-selected="false">
+          <span class="tab-icon">🤔</span>
+          <span class="tab-label">Can I Afford It?</span>
+        </button>
+      </nav>
+
+      <!-- Top Right Controls -->
+      <div class="nav-actions">
+        <!-- Month Selector -->
+        <div class="select-wrapper">
+          <select id="global-month-select" class="control-select" title="Select Month">
+            <!-- Populated dynamically via JS -->
+          </select>
+        </div>
+
+        <!-- Currency Selector -->
+        <div class="select-wrapper">
+          <select id="global-currency-select" class="control-select" title="Select Currency">
+            <option value="₹" selected>₹ INR</option>
+            <option value="$">$ USD</option>
+            <option value="€">€ EUR</option>
+            <option value="£">£ GBP</option>
+          </select>
+        </div>
+
+        <!-- Demo Data / Reset Menu -->
+        <div class="dropdown-menu-wrapper">
+          <button id="btn-settings-toggle" class="btn-icon" title="Data Options">
+            <span>⚙️</span>
+          </button>
+          <div id="settings-dropdown" class="dropdown-content">
+            <button class="dropdown-item" id="btn-reload-demo">
+              <span>⚡</span> Reload Demo Data
+            </button>
+            <button class="dropdown-item text-danger" id="btn-clear-all-data">
+              <span>🗑️</span> Clear All Data (Reset)
+            </button>
+          </div>
+        </div>
+
+        <!-- Primary Action: Add Transaction -->
+        <button class="btn btn-primary" id="btn-open-add-modal">
+          <span class="btn-icon-plus">+</span>
+          <span>Add Transaction</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="main-content">
+
+      <!-- ==============================================
+           TAB 1: HOME / DASHBOARD
+      =============================================== -->
+      <section id="tab-dashboard" class="tab-pane active">
+        <!-- Welcome & Quick Insight Hero Banner -->
+        <div class="dashboard-banner">
+          <div class="banner-text">
+            <div class="banner-badge" id="dash-insight-badge">
+              <span id="dash-insight-icon">👀</span>
+              <span id="dash-insight-title">Your money, decoded.</span>
+            </div>
+            <h1 class="banner-heading" id="dash-welcome-text">Money in. Money out. No drama.</h1>
+            <p class="banner-subtext" id="dash-insight-message">Loading your finances...</p>
+          </div>
+          <div class="banner-action">
+            <button class="btn btn-glass" id="dash-quick-afford-btn">
+              <span>Can I afford something?</span>
+              <span class="arrow-icon">→</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 4 Big Number Metric Cards -->
+        <div class="metrics-grid">
+          <!-- 1. Current Balance -->
+          <div class="metric-card card-primary">
+            <div class="metric-header">
+              <span class="metric-title">Current Balance</span>
+              <span class="metric-icon-badge">👛</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="currency-symbol">₹</span>
+              <span class="metric-number" id="dash-current-balance">0</span>
+            </div>
+            <div class="metric-footer">
+              <span class="metric-pill pill-subtle">All-time cash cushion</span>
+            </div>
+          </div>
+
+          <!-- 2. Monthly Income -->
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Monthly Income</span>
+              <span class="metric-icon-badge text-income">💸</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="currency-symbol">₹</span>
+              <span class="metric-number text-income" id="dash-monthly-income">0</span>
+            </div>
+            <div class="metric-footer">
+              <span class="metric-pill pill-success" id="dash-income-count">0 incoming</span>
+            </div>
+          </div>
+
+          <!-- 3. Monthly Expenses -->
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Monthly Expenses</span>
+              <span class="metric-icon-badge text-expense">🛍️</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="currency-symbol">₹</span>
+              <span class="metric-number" id="dash-monthly-expenses">0</span>
+            </div>
+            <div class="metric-footer">
+              <span class="metric-pill pill-neutral" id="dash-expense-count">0 transactions</span>
+            </div>
+          </div>
+
+          <!-- 4. Monthly Savings & % -->
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-title">Monthly Savings</span>
+              <span class="metric-icon-badge">📈</span>
+            </div>
+            <div class="metric-value-row">
+              <span class="currency-symbol">₹</span>
+              <span class="metric-number" id="dash-monthly-savings">0</span>
+            </div>
+            <div class="metric-footer">
+              <span class="metric-pill pill-lavender" id="dash-savings-percentage">0% saved</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dashboard Two-Column Grid: Spending Breakdown + Recent Transactions -->
+        <div class="dashboard-details-grid">
+          <!-- Left: Spending Breakdown by Category -->
+          <div class="surface-card">
+            <div class="card-header-row">
+              <div>
+                <h3 class="card-title">Where did your money go?</h3>
+                <p class="card-subtitle">Spending breakdown by category this month</p>
+              </div>
+              <button class="btn-text" id="dash-view-budgets-btn">Budgets →</button>
+            </div>
+
+            <!-- Breakdown List -->
+            <div class="category-breakdown-list" id="dash-breakdown-container">
+              <!-- Rendered via JS -->
+              <div class="empty-state-sm">No expenses recorded for this month yet.</div>
+            </div>
+          </div>
+
+          <!-- Right: Recent Transactions -->
+          <div class="surface-card">
+            <div class="card-header-row">
+              <div>
+                <h3 class="card-title">Recent Transactions</h3>
+                <p class="card-subtitle">Latest incoming & outgoing funds</p>
+              </div>
+              <button class="btn-text" id="dash-view-all-txns-btn">View All →</button>
+            </div>
+
+            <div class="transaction-mini-list" id="dash-recent-txns-container">
+              <!-- Rendered via JS -->
+              <div class="empty-state-sm">No recent transactions.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==============================================
+           TAB 2: TRANSACTIONS
+      =============================================== -->
+      <section id="tab-transactions" class="tab-pane">
+        <div class="section-header-row">
+          <div>
+            <h1 class="page-title">Transactions</h1>
+            <p class="page-subtitle">Money in. Money out. No drama.</p>
+          </div>
+          <button class="btn btn-primary" id="btn-txns-add-modal">
+            <span>+ Add Transaction</span>
+          </button>
+        </div>
+
+        <!-- Filters & Search Toolbar -->
+        <div class="toolbar-card">
+          <div class="search-input-wrapper">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="txn-search-input" placeholder="Search by description, note, or category..." />
+            <button id="txn-search-clear" class="clear-btn" title="Clear search" style="display: none;">✕</button>
+          </div>
+
+          <div class="toolbar-filters">
+            <!-- Type Pill Selector -->
+            <div class="segmented-control" id="txn-type-filter">
+              <button class="segment-btn active" data-type="All">All</button>
+              <button class="segment-btn" data-type="Expense">Expenses 🛍️</button>
+              <button class="segment-btn" data-type="Income">Income 💸</button>
+            </div>
+
+            <!-- Category Filter -->
+            <select id="txn-category-filter" class="control-select">
+              <option value="All">All Categories</option>
+              <!-- Populated dynamically -->
+            </select>
+
+            <!-- Reset Filters -->
+            <button id="btn-reset-filters" class="btn btn-outline btn-sm" title="Reset all filters">
+              Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Transactions Ledger List -->
+        <div class="transactions-container">
+          <div class="transactions-header-bar">
+            <span id="txns-count-badge" class="count-badge">0 transactions</span>
+            <span id="txns-net-badge" class="net-badge">Net: ₹0</span>
+          </div>
+
+          <div id="txns-list-container" class="txns-list">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ==============================================
+           TAB 3: BUDGETS
+      =============================================== -->
+      <section id="tab-budgets" class="tab-pane">
+        <div class="section-header-row">
+          <div>
+            <h1 class="page-title">Budgets & Limits</h1>
+            <p class="page-subtitle">Where did your money go? Keep it in check.</p>
+          </div>
+          <button class="btn btn-primary" id="btn-open-budget-modal">
+            <span>+ Set Category Budget</span>
+          </button>
+        </div>
+
+        <!-- Overall Monthly Budget Hero Card -->
+        <div class="surface-card budget-hero-card" id="overall-budget-card">
+          <div class="budget-hero-header">
+            <div>
+              <span class="badge-pill">OVERALL MONTHLY TARGET</span>
+              <h2 class="budget-hero-title" id="budget-hero-title">Monthly Spending Limit</h2>
+            </div>
+            <button class="btn btn-outline btn-sm" id="btn-edit-overall-budget">
+              Set Overall Limit
+            </button>
+          </div>
+
+          <div class="budget-hero-stats">
+            <div>
+              <span class="stat-label">Total Spent</span>
+              <div class="stat-value"><span class="currency-symbol">₹</span><span id="budget-overall-spent">0</span></div>
+            </div>
+            <div class="text-center">
+              <span class="stat-label">Monthly Budget</span>
+              <div class="stat-value"><span class="currency-symbol">₹</span><span id="budget-overall-target">0</span></div>
+            </div>
+            <div class="text-right">
+              <span class="stat-label">Remaining</span>
+              <div class="stat-value" id="budget-overall-remaining-wrapper"><span class="currency-symbol">₹</span><span id="budget-overall-remaining">0</span></div>
+            </div>
+          </div>
+
+          <!-- Progress Bar -->
+          <div class="progress-track-lg">
+            <div id="budget-overall-bar" class="progress-fill-lg" style="width: 0%;"></div>
+          </div>
+
+          <div class="budget-hero-footer">
+            <div id="budget-overall-warning" class="budget-alert-badge alert-healthy">
+              <span>🟢</span> <span id="budget-overall-warning-text">No overall budget set yet.</span>
+            </div>
+            <span class="budget-percent-text" id="budget-overall-pct">0% used</span>
+          </div>
+        </div>
+
+        <!-- Category Budgets Grid -->
+        <div class="category-budgets-section">
+          <div class="card-header-row">
+            <div>
+              <h3 class="card-title">Category Budgets</h3>
+              <p class="card-subtitle">Limits for individual spending areas</p>
+            </div>
+          </div>
+
+          <div class="category-budgets-grid" id="category-budgets-container">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ==============================================
+           TAB 4: SAVINGS GOALS
+      =============================================== -->
+      <section id="tab-goals" class="tab-pane">
+        <div class="section-header-row">
+          <div>
+            <h1 class="page-title">Savings Goals</h1>
+            <p class="page-subtitle">Save for what matters. No guilt.</p>
+          </div>
+          <button class="btn btn-primary" id="btn-open-goal-modal">
+            <span>+ Create Savings Goal</span>
+          </button>
+        </div>
+
+        <!-- Quick Goal Templates -->
+        <div class="goal-presets-bar">
+          <span class="presets-title">💡 Popular Student Goals:</span>
+          <div class="preset-buttons">
+            <button class="goal-preset-pill" data-name="MacBook Air" data-type="Laptop" data-amount="75000">💻 Laptop</button>
+            <button class="goal-preset-pill" data-name="Goa Trip with Batch" data-type="Trip" data-amount="15000">🏖️ Trip</button>
+            <button class="goal-preset-pill" data-name="Emergency Cash Buffer" data-type="Emergency Fund" data-amount="10000">🛡️ Emergency Fund</button>
+            <button class="goal-preset-pill" data-name="Next-Gen Smartphone" data-type="Phone" data-amount="30000">📱 Phone</button>
+          </div>
+        </div>
+
+        <!-- Goals Grid -->
+        <div class="goals-grid" id="goals-container">
+          <!-- Rendered dynamically -->
+        </div>
+      </section>
+
+      <!-- ==============================================
+           TAB 5: INSIGHTS
+      =============================================== -->
+      <section id="tab-insights" class="tab-pane">
+        <div class="section-header-row">
+          <div>
+            <h1 class="page-title">Financial Insights</h1>
+            <p class="page-subtitle">Your money, decoded.</p>
+          </div>
+        </div>
+
+        <!-- 4 Key Insights Cards -->
+        <div class="insights-grid">
+          <!-- 1. Biggest Expense Category -->
+          <div class="surface-card insight-card">
+            <div class="insight-top">
+              <span class="insight-label">Biggest Expense Category</span>
+              <span class="insight-icon" id="insight-top-cat-icon">🍔</span>
+            </div>
+            <div class="insight-main">
+              <span class="insight-cat-name" id="insight-top-cat-name">None</span>
+              <div class="insight-amount-row">
+                <span class="currency-symbol">₹</span>
+                <span class="insight-num" id="insight-top-cat-amt">0</span>
+              </div>
+            </div>
+            <div class="insight-bottom">
+              <span class="metric-pill pill-warning" id="insight-top-cat-pct">0% of spend</span>
+            </div>
+          </div>
+
+          <!-- 2. Daily Average Spending -->
+          <div class="surface-card insight-card">
+            <div class="insight-top">
+              <span class="insight-label">Average Daily Spending</span>
+              <span class="insight-icon">📅</span>
+            </div>
+            <div class="insight-main">
+              <div class="insight-amount-row">
+                <span class="currency-symbol">₹</span>
+                <span class="insight-num" id="insight-daily-avg">0</span>
+                <span class="unit-text">/ day</span>
+              </div>
+            </div>
+            <div class="insight-bottom">
+              <span class="metric-pill pill-subtle" id="insight-days-elapsed">Calculated across this month</span>
+            </div>
+          </div>
+
+          <!-- 3. Savings Rate -->
+          <div class="surface-card insight-card">
+            <div class="insight-top">
+              <span class="insight-label">Savings Rate</span>
+              <span class="insight-icon">🎯</span>
+            </div>
+            <div class="insight-main">
+              <div class="insight-amount-row">
+                <span class="insight-num" id="insight-savings-rate">0%</span>
+              </div>
+            </div>
+            <div class="insight-bottom">
+              <span class="metric-pill pill-success" id="insight-savings-eval">Healthy student cushion</span>
+            </div>
+          </div>
+
+          <!-- 4. Highest Spending Day -->
+          <div class="surface-card insight-card">
+            <div class="insight-top">
+              <span class="insight-label">Highest Spending Day</span>
+              <span class="insight-icon">⚡</span>
+            </div>
+            <div class="insight-main">
+              <span class="insight-cat-name" id="insight-peak-day">N/A</span>
+              <div class="insight-amount-row">
+                <span class="currency-symbol">₹</span>
+                <span class="insight-num" id="insight-peak-amt">0</span>
+              </div>
+            </div>
+            <div class="insight-bottom">
+              <span class="metric-pill pill-subtle" id="insight-peak-item">Top purchase</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Month Comparison Card -->
+        <div class="surface-card comparison-card">
+          <div class="comparison-header">
+            <div>
+              <h3 class="card-title">Spending vs Previous Month</h3>
+              <p class="card-subtitle" id="comparison-subtext">Comparing this month to previous month</p>
+            </div>
+            <span class="badge-pill" id="comparison-badge">Month on Month</span>
+          </div>
+          <div class="comparison-body">
+            <div class="comparison-message" id="comparison-message">
+              Great job keeping track of your funds!
+            </div>
+            <div class="comparison-bars">
+              <div class="comparison-item">
+                <span class="bar-label" id="comparison-prev-label">Last Month</span>
+                <div class="bar-wrapper">
+                  <div class="bar-fill bar-prev" id="comparison-prev-bar" style="width: 50%;"></div>
+                </div>
+                <span class="bar-val" id="comparison-prev-val">₹0</span>
+              </div>
+              <div class="comparison-item">
+                <span class="bar-label" id="comparison-curr-label">This Month</span>
+                <div class="bar-wrapper">
+                  <div class="bar-fill bar-curr" id="comparison-curr-bar" style="width: 50%;"></div>
+                </div>
+                <span class="bar-val" id="comparison-curr-val">₹0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Spending Trends Daily Timeline -->
+        <div class="surface-card">
+          <div class="card-header-row">
+            <div>
+              <h3 class="card-title">Spending Trends</h3>
+              <p class="card-subtitle">Daily spending pattern across the month</p>
+            </div>
+          </div>
+          <div class="trends-chart-container" id="trends-chart-container">
+            <!-- Dynamic SVG or CSS bars rendered via JS -->
+          </div>
+        </div>
+
+        <!-- Gen-Z Student Money Tips -->
+        <div class="surface-card tips-card">
+          <div class="card-header-row">
+            <div>
+              <h3 class="card-title">Student Money Playbook 💡</h3>
+              <p class="card-subtitle">Actionable tips tailored to your spending habits</p>
+            </div>
+          </div>
+          <div class="tips-grid" id="student-tips-container">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ==============================================
+           TAB 6: CAN I AFFORD IT?
+      =============================================== -->
+      <section id="tab-afford" class="tab-pane">
+        <div class="section-header-row">
+          <div>
+            <h1 class="page-title">Can I Afford It?</h1>
+            <p class="page-subtitle">The honest reality check before you tap to pay.</p>
+          </div>
+        </div>
+
+        <div class="afford-layout">
+          <!-- Input Form Card -->
+          <div class="surface-card afford-input-card">
+            <h2 class="card-title mb-1">Enter Purchase Details</h2>
+            <p class="card-subtitle mb-4">We test this against your current cash reserve and safety cushion.</p>
+
+            <form id="afford-form" class="app-form">
+              <div class="form-group">
+                <label for="afford-item-name" class="form-label">What do you want to buy? 🏷️</label>
+                <input type="text" id="afford-item-name" class="form-input" placeholder="e.g. Wireless Earbuds, Concert Ticket, Jacket" required />
+              </div>
+
+              <div class="form-group">
+                <label for="afford-price" class="form-label">Price (<span class="currency-symbol">₹</span>) 💵</label>
+                <input type="number" id="afford-price" class="form-input" placeholder="0.00" min="1" step="any" required />
+              </div>
+
+              <div class="form-group">
+                <div class="label-row">
+                  <label for="afford-balance" class="form-label">Current Balance Available (<span class="currency-symbol">₹</span>)</label>
+                  <button type="button" class="btn-link" id="btn-sync-afford-balance">Sync from Balance</button>
+                </div>
+                <input type="number" id="afford-balance" class="form-input" placeholder="0.00" step="any" required />
+                <span class="form-hint">Auto-synced from your actual transaction records.</span>
+              </div>
+
+              <button type="submit" class="btn btn-primary btn-block btn-lg" id="btn-run-afford">
+                <span>Run Reality Check ✨</span>
+              </button>
+            </form>
+          </div>
+
+          <!-- Result Reality Check Card -->
+          <div class="surface-card afford-result-card" id="afford-result-card">
+            <div class="afford-idle-state" id="afford-idle-state">
+              <div class="idle-icon">🤔</div>
+              <h3>Ready for the verdict?</h3>
+              <p>Type in what you want to buy and hit Run Reality Check to see if your wallet agrees.</p>
+            </div>
+
+            <div class="afford-verdict-content" id="afford-verdict-content" style="display: none;">
+              <div class="verdict-banner" id="verdict-banner">
+                <span class="verdict-emoji" id="verdict-emoji">🎉</span>
+                <span class="verdict-tag" id="verdict-badge">Looks Good</span>
+              </div>
+
+              <h2 class="verdict-headline" id="verdict-headline">Affordable with a healthy buffer!</h2>
+              <p class="verdict-explanation" id="verdict-explanation">Explanation text...</p>
+
+              <!-- Stats Breakdown -->
+              <div class="verdict-stats-box">
+                <div class="verdict-stat-item">
+                  <span class="stat-label">Purchase Price</span>
+                  <span class="stat-val"><span class="currency-symbol">₹</span><span id="verdict-price">0</span></span>
+                </div>
+                <div class="verdict-stat-item">
+                  <span class="stat-label">Remaining Balance</span>
+                  <span class="stat-val" id="verdict-remaining-wrapper"><span class="currency-symbol">₹</span><span id="verdict-remaining">0</span></span>
+                </div>
+                <div class="verdict-stat-item">
+                  <span class="stat-label">% of Balance</span>
+                  <span class="stat-val" id="verdict-pct">0%</span>
+                </div>
+              </div>
+
+              <div class="verdict-tip-box">
+                <div class="tip-icon">💡</div>
+                <div class="tip-text" id="verdict-recommendation">Recommendation text...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Mobile Bottom Navigation Bar -->
+    <nav class="mobile-bottom-nav">
+      <button class="mobile-nav-tab active" data-tab="dashboard">
+        <span class="tab-icon">🏠</span>
+        <span class="tab-label">Home</span>
+      </button>
+      <button class="mobile-nav-tab" data-tab="transactions">
+        <span class="tab-icon">💳</span>
+        <span class="tab-label">Ledger</span>
+      </button>
+      <button class="mobile-add-btn" id="btn-mobile-add-modal" title="Add Transaction">
+        <span>+</span>
+      </button>
+      <button class="mobile-nav-tab" data-tab="budgets">
+        <span class="tab-icon">📊</span>
+        <span class="tab-label">Budgets</span>
+      </button>
+      <button class="mobile-nav-tab" data-tab="insights">
+        <span class="tab-icon">💡</span>
+        <span class="tab-label">Insights</span>
+      </button>
+    </nav>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p><strong>MONEYY</strong> — <em>Your money. Your choices.</em></p>
+      <p class="footer-subtext">Built for students, not accountants :) • All data stored locally on your device.</p>
+    </footer>
+
+  </div>
+
+  <!-- ==============================================
+       MODALS
+  =============================================== -->
+
+  <!-- 1. ADD / EDIT TRANSACTION MODAL -->
+  <div class="modal-backdrop" id="modal-transaction">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modal-txn-title">Add Transaction</h2>
+        <button class="modal-close-btn" data-close-modal="modal-transaction">✕</button>
+      </div>
+
+      <form id="txn-form" class="modal-form">
+        <input type="hidden" id="txn-edit-id" value="" />
+
+        <!-- Segmented Type Selector -->
+        <div class="form-group">
+          <div class="segmented-control type-segmented" id="form-type-selector">
+            <button type="button" class="segment-btn active" data-type="Expense">
+              <span>🛍️ Expense</span>
+            </button>
+            <button type="button" class="segment-btn" data-type="Income">
+              <span>💸 Income</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Amount Input with Quick Pills -->
+        <div class="form-group">
+          <label for="txn-amount" class="form-label">Amount (<span class="currency-symbol">₹</span>) *</label>
+          <div class="amount-input-wrapper">
+            <span class="amount-currency-symbol">₹</span>
+            <input type="number" id="txn-amount" class="amount-input" placeholder="0" min="0.01" step="any" required />
+          </div>
+          <!-- Quick Amount Buttons -->
+          <div class="quick-amounts">
+            <button type="button" class="btn-chip" data-quick-amount="50">+50</button>
+            <button type="button" class="btn-chip" data-quick-amount="100">+100</button>
+            <button type="button" class="btn-chip" data-quick-amount="500">+500</button>
+            <button type="button" class="btn-chip" data-quick-amount="1000">+1k</button>
+            <button type="button" class="btn-chip" data-quick-amount="2000">+2k</button>
+          </div>
+        </div>
+
+        <!-- Category Select -->
+        <div class="form-group">
+          <label for="txn-category" class="form-label">Category *</label>
+          <select id="txn-category" class="form-input" required>
+            <!-- Populated dynamically via JS -->
+          </select>
+        </div>
+
+        <!-- Description -->
+        <div class="form-group">
+          <label for="txn-description" class="form-label">Description *</label>
+          <input type="text" id="txn-description" class="form-input" placeholder="e.g. Late night pizza, Metro recharge, Freelance UI" required />
+        </div>
+
+        <!-- Date & Payment Method in a 2-Col Grid -->
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="txn-date" class="form-label">Date *</label>
+            <input type="date" id="txn-date" class="form-input" required />
+          </div>
+
+          <div class="form-group">
+            <label for="txn-payment-method" class="form-label">Payment Method *</label>
+            <select id="txn-payment-method" class="form-input" required>
+              <option value="UPI">⚡ UPI</option>
+              <option value="Cash">💵 Cash</option>
+              <option value="Debit Card">💳 Debit Card</option>
+              <option value="Credit Card">💳 Credit Card</option>
+              <option value="Bank Transfer">🏦 Bank Transfer</option>
+              <option value="Other">🏷️ Other</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Optional Note -->
+        <div class="form-group">
+          <label for="txn-note" class="form-label">Optional Note</label>
+          <input type="text" id="txn-note" class="form-input" placeholder="Split with batchmates, refund pending, etc." />
+        </div>
+
+        <!-- Modal Actions -->
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" data-close-modal="modal-transaction">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-txn">Save Transaction</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. BUDGET MODAL (SET OVERALL / CATEGORY BUDGET) -->
+  <div class="modal-backdrop" id="modal-budget">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modal-budget-title">Set Monthly Budget</h2>
+        <button class="modal-close-btn" data-close-modal="modal-budget">✕</button>
+      </div>
+
+      <form id="budget-form" class="modal-form">
+        <div class="form-group">
+          <label for="budget-category" class="form-label">Category *</label>
+          <select id="budget-category" class="form-input" required>
+            <option value="Overall">🎯 Overall Monthly Budget</option>
+            <!-- Expense categories populated via JS -->
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="budget-amount" class="form-label">Monthly Limit (<span class="currency-symbol">₹</span>) *</label>
+          <input type="number" id="budget-amount" class="form-input" placeholder="e.g. 5000" min="1" step="any" required />
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" data-close-modal="modal-budget">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Budget</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. SAVINGS GOAL MODAL -->
+  <div class="modal-backdrop" id="modal-goal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modal-goal-title">Create Savings Goal</h2>
+        <button class="modal-close-btn" data-close-modal="modal-goal">✕</button>
+      </div>
+
+      <form id="goal-form" class="modal-form">
+        <input type="hidden" id="goal-edit-id" value="" />
+
+        <div class="form-group">
+          <label for="goal-name" class="form-label">Goal Name *</label>
+          <input type="text" id="goal-name" class="form-input" placeholder="e.g. M3 MacBook, Monsoon Trek, Phone" required />
+        </div>
+
+        <div class="form-group">
+          <label for="goal-category-type" class="form-label">Goal Category</label>
+          <select id="goal-category-type" class="form-input">
+            <option value="Laptop">💻 Laptop</option>
+            <option value="Trip">🏖️ Trip</option>
+            <option value="Emergency Fund">🛡️ Emergency Fund</option>
+            <option value="Phone">📱 Phone</option>
+            <option value="Custom">🎯 Custom</option>
+          </select>
+        </div>
+
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="goal-target" class="form-label">Target Amount (<span class="currency-symbol">₹</span>) *</label>
+            <input type="number" id="goal-target" class="form-input" placeholder="e.g. 60000" min="1" step="any" required />
+          </div>
+
+          <div class="form-group">
+            <label for="goal-saved" class="form-label">Already Saved (<span class="currency-symbol">₹</span>)</label>
+            <input type="number" id="goal-saved" class="form-input" placeholder="0" min="0" step="any" />
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" data-close-modal="modal-goal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Goal</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 4. DEPOSIT TO GOAL MODAL -->
+  <div class="modal-backdrop" id="modal-deposit">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-header">
+        <h2 class="modal-title">Deposit to Goal</h2>
+        <button class="modal-close-btn" data-close-modal="modal-deposit">✕</button>
+      </div>
+
+      <form id="deposit-form" class="modal-form">
+        <input type="hidden" id="deposit-goal-id" value="" />
+        <p class="modal-subtitle" id="deposit-goal-name">Deposit funds</p>
+
+        <div class="form-group">
+          <label for="deposit-amount" class="form-label">Amount to Add (<span class="currency-symbol">₹</span>) *</label>
+          <input type="number" id="deposit-amount" class="form-input" placeholder="e.g. 1000" min="1" step="any" required />
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" data-close-modal="modal-deposit">Cancel</button>
+          <button type="submit" class="btn btn-primary">Add Funds</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 5. DELETE CONFIRMATION MODAL -->
+  <div class="modal-backdrop" id="modal-delete">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-header">
+        <h2 class="modal-title">Confirm Delete</h2>
+        <button class="modal-close-btn" data-close-modal="modal-delete">✕</button>
+      </div>
+      <div class="modal-body">
+        <p id="delete-modal-message">Are you sure you want to delete this item? This action cannot be undone.</p>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-outline" data-close-modal="modal-delete">Cancel</button>
+        <button type="button" class="btn btn-danger" id="btn-confirm-delete">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Main JavaScript Controller -->
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
