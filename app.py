@@ -6,6 +6,13 @@ Powered by Supabase Auth and Supabase PostgreSQL with Row Level Security.
 
 import os
 import sys
+
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 from functools import wraps
 from flask import Flask, render_template, request, jsonify, session
 
@@ -97,11 +104,6 @@ def api_auth_signup():
         if session_info.get("access_token"):
             session["access_token"] = session_info["access_token"]
             session["user"] = user_info
-            # Automatically seed realistic starter student data for the new user
-            try:
-                sdb.seed_user_demo_data(user_id=user_info["id"], access_token=session_info["access_token"], force=False)
-            except Exception as e:
-                app.logger.warning(f"Demo seeding error on signup: {e}")
 
         return jsonify({
             "success": True,

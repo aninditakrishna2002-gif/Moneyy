@@ -308,7 +308,21 @@
   function setLoggedOutState() {
     state.user = null;
     state.token = '';
+    state.transactions = [];
+    state.dashboard = null;
+    state.searchQuery = '';
+    state.filterType = 'All';
+    state.filterCategory = 'All';
+    state.currentMonth = 'All';
     localStorage.removeItem('moneyy_token');
+
+    // Clear dynamic user data containers
+    if (dom.txnsListContainer) dom.txnsListContainer.innerHTML = '';
+    if (dom.dashRecentTxnsContainer) dom.dashRecentTxnsContainer.innerHTML = '';
+    if (dom.dashBreakdownContainer) dom.dashBreakdownContainer.innerHTML = '';
+    if (dom.categoryBudgetsContainer) dom.categoryBudgetsContainer.innerHTML = '';
+    if (dom.goalsContainer) dom.goalsContainer.innerHTML = '';
+    if (dom.trendsChartContainer) dom.trendsChartContainer.innerHTML = '';
 
     // Hide app view, show auth screen
     if (dom.appMainView) dom.appMainView.style.display = 'none';
@@ -1531,15 +1545,28 @@
     });
 
     dom.btnResetFilters.addEventListener('click', () => {
+      // 1. Reset search input & clear icon
       dom.txnSearchInput.value = '';
       dom.txnSearchClear.style.display = 'none';
       state.searchQuery = '';
+
+      // 2. Reset All/Expenses/Income filter to All
       state.filterType = 'All';
-      state.filterCategory = 'All';
       dom.txnTypeFilter.querySelectorAll('.segment-btn').forEach((b) => {
         b.classList.toggle('active', b.dataset.type === 'All');
       });
+
+      // 3. Reset category filter to All Categories
+      state.filterCategory = 'All';
       dom.txnCategoryFilter.value = 'All';
+
+      // 4. Reset month filter to All Months to load complete user history
+      state.currentMonth = 'All';
+      if (dom.globalMonthSelect) {
+        dom.globalMonthSelect.value = 'All';
+      }
+
+      // 5. Reload and display complete transaction list for the CURRENT USER
       loadTransactions();
     });
 

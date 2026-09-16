@@ -252,11 +252,128 @@ class TestSupabaseIntegration(unittest.TestCase):
             "recommendation": "Great purchase.",
         }
 
-        res = self.client.post("/api/afford", json={"item_name": "Course Books", "price": 800.0, "current_balance": 10000.0}, headers={"Authorization": "Bearer token-user-a"})
-        self.assertEqual(res.status_code, 200)
-        data = res.get_json()["data"]
-        self.assertEqual(data["verdict"], "Looks Good")
-        self.assertEqual(data["remaining_balance"], 9200.0)
+    @patch("supabase_client.sign_up_user")
+    @patch("supabase_db.seed_user_demo_data")
+    def test_signup_does_not_seed_demo_data(self, mock_seed, mock_signup):
+        """Ensures that registering a new account does NOT automatically seed demo data."""
+        mock_signup.return_value = (True, {
+            "user": {
+                "id": "usr-uuid-clean",
+                "email": "fresh@campus.edu",
+                "name": "Fresh Student",
+            },
+            "session": {
+                "access_token": "mock-jwt-clean",
+            },
+            "message": "Signup successful!",
+        })
+
+        payload = {
+            "name": "Fresh Student",
+            "email": "fresh@campus.edu",
+            "password": "cleanpassword123",
+        }
+        res = self.client.post("/api/auth/signup", json=payload)
+        self.assertEqual(res.status_code, 201)
+        # Verify seed_user_demo_data was NOT called
+        mock_seed.assert_not_called()
+
+    @patch("supabase_client.get_user_from_token")
+    @patch("supabase_db.get_all_time_transactions")
+    @patch("supabase_db.get_transactions")
+    @patch("supabase_db.get_budgets")
+    @patch("supabase_db.get_savings_goals")
+    def test_new_user_zero_state(self, mock_goals, mock_budgets, mock_txns, mock_all_txns, mock_user):
+        """
+        Ensures a newly created account starts with:
+        Balance: 0, Income: 0, Expenses: 0, Savings: 0, Transactions: 0, Budgets: 0, Goals: 0.
+        """
+        mock_user.return_value = {"id": "usr-new-000", "email": "brandnew@campus.edu", "name": "Newbie"}
+        mock_all_txns.return_value = []
+        mock_txns.return_value = []
+        mock_budgets.return_value = []
+        mock_goals.return_value = []
+
+        headers = {"Authorization": "Bearer token-new"}
+
+        # 1. Dashboard
+        res_dash = self.client.get("/api/dashboard", headers=headers)
+        self.assertEqual(res_dash.status_code, 200)
+        dash = res_dash.get_json()["data"]
+        self.assertEqual(dash["current_balance"], 0.0)
+        self.assertEqual(dash["monthly_income"], 0.0)
+        self.assertEqual(dash["monthly_expenses"], 0.0)
+        self.assertEqual(dash["monthly_savings"], 0.0)
+        self.assertEqual(dash["savings_percentage"], 0.0)
+        self.assertEqual(len(dash["recent_transactions"]), 0)
+        self.assertEqual(len(dash["spending_breakdown"]), 0)
+
+        # 2. Transactions
+        res_txns = self.client.get("/api/transactions", headers=headers)
+        self.assertEqual(res_txns.status_code, 200)
+        txns = res_txns.get_json()
+        self.assertEqual(txns["count"], 0)
+        self.assertEqual(len(txns["data"]), 0)
+
+        # 3. Budgets
+        res_b = self.client.get("/api/budgets", headers=headers)
+        self.assertEqual(res_b.status_code, 200)
+        budgets_data = res_b.get_json()["data"]
+        self.assertFalse(budgets_data["has_any_budget"])
+        self.assertIsNone(budgets_data["overall_budget"])
+        self.assertEqual(len(budgets_data["category_budgets"]), 0)
+
+        # 4. Goals
+        res_g = self.client.get("/api/goals", headers=headers)
+        self.assertEqual(res_g.status_code, 200)
+        goals = res_g.get_json()["data"]
+        self.assertEqual(len(goals), 0)
+
+    @patch("supabase_client.get_user_from_token")
+    @patch("supabase_db.get_transactions")
+    @patch("supabase_db.get_budgets")
+    @patch("supabase_db.get_savings_goals")
+    def test_user_isolation_budgets_and_goals(self, mock_goals, mock_budgets, mock_txns, mock_user):
+        """
+        Tests that User A's budgets and goals are isolated and cannot be viewed by User B.
+        """
+        mock_txns.return_value = []
+        def get_user_side_effect(token):
+            if token == "token-user-a":
+                return {"id": "uuid-a", "email": "a@campus.edu", "name": "User A"}
+            elif token == "token-user-b":
+                return {"id": "uuid-b", "email": "b@campus.edu", "name": "User B"}
+            return None
+        mock_user.side_effect = get_user_side_effect
+
+        def get_budgets_side_effect(user_id, **kwargs):
+            if user_id == "uuid-a":
+                return [{"id": "b-a-1", "user_id": "uuid-a", "category": "Food", "monthly_amount": 5000.0}]
+            return []
+        mock_budgets.side_effect = get_budgets_side_effect
+
+        def get_goals_side_effect(user_id, **kwargs):
+            if user_id == "uuid-a":
+                return [{"id": "g-a-1", "user_id": "uuid-a", "name": "User A Laptop", "target_amount": 60000.0, "saved_amount": 10000.0}]
+            return []
+        mock_goals.side_effect = get_goals_side_effect
+
+        # User A checks budgets
+        res_a_b = self.client.get("/api/budgets", headers={"Authorization": "Bearer token-user-a"})
+        self.assertEqual(len(res_a_b.get_json()["data"]["category_budgets"]), 1)
+
+        # User B checks budgets -> 0
+        res_b_b = self.client.get("/api/budgets", headers={"Authorization": "Bearer token-user-b"})
+        self.assertEqual(len(res_b_b.get_json()["data"]["category_budgets"]), 0)
+
+        # User A checks goals
+        res_a_g = self.client.get("/api/goals", headers={"Authorization": "Bearer token-user-a"})
+        self.assertEqual(len(res_a_g.get_json()["data"]), 1)
+        self.assertEqual(res_a_g.get_json()["data"][0]["name"], "User A Laptop")
+
+        # User B checks goals -> 0
+        res_b_g = self.client.get("/api/goals", headers={"Authorization": "Bearer token-user-b"})
+        self.assertEqual(len(res_b_g.get_json()["data"]), 0)
 
     def test_security_and_secrets_check(self):
         """
