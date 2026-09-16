@@ -2,6 +2,7 @@
  * app.js - Frontend Application Controller for MONEYY
  * Tagline: "Your money. Your choices."
  * Modern Gen-Z personal finance tracker for students.
+ * Powered by Supabase Auth and Supabase PostgreSQL.
  */
 
 (function () {
@@ -14,6 +15,8 @@
     activeTab: 'dashboard',
     currentMonth: '',
     currency: localStorage.getItem('moneyy_currency') || '₹',
+    token: localStorage.getItem('moneyy_token') || '',
+    user: null, // { id, email, name }
     meta: {
       income_categories: [],
       expense_categories: [],
@@ -26,13 +29,30 @@
     searchQuery: '',
     transactions: [],
     dashboard: null,
-    pendingDelete: null, // { type: 'transaction'|'budget'|'goal', id: number, label: string }
+    pendingDelete: null, // { type: 'transaction'|'budget'|'goal', id: string, label: string }
   };
 
   // ==========================================
   // DOM ELEMENT SELECTORS
   // ==========================================
   const dom = {
+    // Auth Elements
+    authScreen: document.getElementById('auth-screen'),
+    appMainView: document.getElementById('app-main-view'),
+    authRequiredViews: document.querySelectorAll('.auth-required-view'),
+    authGuestViews: document.querySelectorAll('.auth-guest-view'),
+    authToggle: document.getElementById('auth-toggle'),
+    formLogin: document.getElementById('form-login'),
+    formSignup: document.getElementById('form-signup'),
+    loginEmail: document.getElementById('login-email'),
+    loginPassword: document.getElementById('login-password'),
+    signupName: document.getElementById('signup-name'),
+    signupEmail: document.getElementById('signup-email'),
+    signupPassword: document.getElementById('signup-password'),
+    authErrorBanner: document.getElementById('auth-error-banner'),
+    navUserName: document.getElementById('nav-user-name'),
+    btnLogout: document.getElementById('btn-logout'),
+
     // Navigation & Global Controls
     navTabs: document.querySelectorAll('.nav-tab'),
     mobileNavTabs: document.querySelectorAll('.mobile-nav-tab'),
@@ -51,6 +71,7 @@
     txnsAddModalBtn: document.getElementById('btn-txns-add-modal'),
 
     // Dashboard Elements
+    dashWelcomeText: document.getElementById('dash-welcome-text'),
     dashInsightBadge: document.getElementById('dash-insight-badge'),
     dashInsightIcon: document.getElementById('dash-insight-icon'),
     dashInsightTitle: document.getElementById('dash-insight-title'),
@@ -177,7 +198,7 @@
   };
 
   // ==========================================
-  // UTILITY HELPERS
+  // UTILITY HELPERS & AUTHENTICATED FETCH
   // ==========================================
 
   function formatMoney(num) {
@@ -221,11 +242,110 @@
     modalEl.classList.remove('open');
   }
 
+  function showAuthError(message) {
+    if (!dom.authErrorBanner) return;
+    if (message) {
+      dom.authErrorBanner.textContent = message;
+      dom.authErrorBanner.style.display = 'block';
+    } else {
+      dom.authErrorBanner.style.display = 'none';
+      dom.authErrorBanner.textContent = '';
+    }
+  }
+
+  /**
+   * Wrapper around fetch that adds the Authorization header if state.token exists.
+   * Handles 401 Unauthorized automatically.
+   */
+  async function apiFetch(url, options = {}) {
+    const headers = options.headers ? { ...options.headers } : {};
+    if (state.token) {
+      headers['Authorization'] = `Bearer ${state.token}`;
+    }
+    options.headers = headers;
+
+    const res = await fetch(url, options);
+
+    if (res.status === 401) {
+      // Session expired or unauthenticated
+      setLoggedOutState();
+      throw new Error('Please log in to continue.');
+    }
+
+    return res;
+  }
+
+  // ==========================================
+  // AUTH STATE CONTROLLER
+  // ==========================================
+
+  function setLoggedInState(user, token) {
+    state.user = user;
+    if (token) {
+      state.token = token;
+      localStorage.setItem('moneyy_token', token);
+    }
+
+    // Update UI Elements
+    const name = user.name || 'Student';
+    if (dom.navUserName) dom.navUserName.textContent = name;
+    if (dom.dashWelcomeText) dom.dashWelcomeText.textContent = `Hey ${name}! Your money, decoded.`;
+
+    // Show app view, hide auth screen
+    if (dom.authScreen) dom.authScreen.style.display = 'none';
+    if (dom.appMainView) dom.appMainView.style.display = 'block';
+
+    dom.authRequiredViews.forEach((el) => {
+      el.style.display = el.tagName === 'NAV' ? 'flex' : 'flex';
+    });
+    dom.authGuestViews.forEach((el) => {
+      el.style.display = 'none';
+    });
+
+    switchTab(state.activeTab || 'dashboard');
+  }
+
+  function setLoggedOutState() {
+    state.user = null;
+    state.token = '';
+    localStorage.removeItem('moneyy_token');
+
+    // Hide app view, show auth screen
+    if (dom.appMainView) dom.appMainView.style.display = 'none';
+    if (dom.authScreen) dom.authScreen.style.display = 'flex';
+
+    dom.authRequiredViews.forEach((el) => {
+      el.style.display = 'none';
+    });
+    dom.authGuestViews.forEach((el) => {
+      el.style.display = 'flex';
+    });
+
+    showAuthError('');
+  }
+
+  async function checkAuthSession() {
+    try {
+      const res = await fetch('/api/auth/me', {
+        headers: state.token ? { 'Authorization': `Bearer ${state.token}` } : {},
+      });
+      const json = await res.json();
+      if (json.success && json.data && json.data.user) {
+        setLoggedInState(json.data.user, json.data.access_token || state.token);
+      } else {
+        setLoggedOutState();
+      }
+    } catch (err) {
+      setLoggedOutState();
+    }
+  }
+
   // ==========================================
   // TAB NAVIGATION
   // ==========================================
 
   function switchTab(tabName) {
+    if (!state.user) return; // Guard tab access if not authenticated
     state.activeTab = tabName;
 
     // Desktop nav
@@ -256,7 +376,7 @@
   }
 
   // ==========================================
-  // API CALLS
+  // METADATA & SELECTORS
   // ==========================================
 
   async function fetchMetadata() {
@@ -281,7 +401,6 @@
     const today = new Date();
     const months = [];
 
-    // Generate last 5 months, current month, and next month
     for (let i = -1; i <= 5; i++) {
       const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
       const y = d.getFullYear();
@@ -306,7 +425,6 @@
   }
 
   function populateCategoryOptions() {
-    // Populate transactions category filter
     const filterCat = dom.txnCategoryFilter;
     filterCat.innerHTML = '<option value="All">All Categories</option>';
 
@@ -321,7 +439,6 @@
       filterCat.appendChild(opt);
     });
 
-    // Populate budget modal categories (expenses only)
     const budgetCat = dom.budgetCategory;
     budgetCat.innerHTML = '<option value="Overall">🎯 Overall Monthly Budget</option>';
     state.meta.expense_categories.forEach((cat) => {
@@ -352,22 +469,21 @@
   // ==========================================
 
   async function loadDashboard() {
+    if (!state.user) return;
     try {
       const monthParam = state.currentMonth ? `?month=${state.currentMonth}` : '';
-      const res = await fetch(`/api/dashboard${monthParam}`);
+      const res = await apiFetch(`/api/dashboard${monthParam}`);
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
 
       const d = json.data;
       state.dashboard = d;
 
-      // Update 4 Hero Metric Cards
       dom.dashCurrentBalance.textContent = formatMoney(d.current_balance);
       dom.dashMonthlyIncome.textContent = formatMoney(d.monthly_income);
       dom.dashMonthlyExpenses.textContent = formatMoney(d.monthly_expenses);
       dom.dashMonthlySavings.textContent = formatMoney(d.monthly_savings);
 
-      // Savings % Pill
       if (d.monthly_savings < 0) {
         dom.dashSavingsPct.className = 'metric-pill pill-warning';
         dom.dashSavingsPct.textContent = 'Deficit';
@@ -376,11 +492,9 @@
         dom.dashSavingsPct.textContent = `${d.savings_percentage}% saved`;
       }
 
-      // Counts
       dom.dashIncomeCount.textContent = `${d.monthly_income > 0 ? '+' : ''}${formatMoney(d.monthly_income)} in`;
       dom.dashExpenseCount.textContent = `${d.spending_breakdown.length} categories`;
 
-      // Quick Insight Banner
       if (d.quick_insight) {
         dom.dashInsightTitle.textContent = d.quick_insight.title;
         dom.dashInsightMessage.textContent = d.quick_insight.message;
@@ -394,12 +508,8 @@
         dom.dashInsightIcon.textContent = iconMap[d.quick_insight.type] || '💡';
       }
 
-      // Spending Breakdown
       renderSpendingBreakdown(d.spending_breakdown);
-
-      // Recent Transactions
       renderRecentTransactions(d.recent_transactions);
-
       updateCurrencyLabels();
     } catch (err) {
       console.error('Error loading dashboard:', err);
@@ -471,6 +581,7 @@
   // ==========================================
 
   async function loadTransactions() {
+    if (!state.user) return;
     try {
       const params = new URLSearchParams();
       if (state.filterType !== 'All') params.append('type', state.filterType);
@@ -478,7 +589,7 @@
       if (state.currentMonth && state.currentMonth !== 'All') params.append('month', state.currentMonth);
       if (state.searchQuery.trim()) params.append('search', state.searchQuery.trim());
 
-      const res = await fetch(`/api/transactions?${params.toString()}`);
+      const res = await apiFetch(`/api/transactions?${params.toString()}`);
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
 
@@ -495,11 +606,10 @@
 
     dom.txnsCountBadge.textContent = `${txns.length} transaction${txns.length === 1 ? '' : 's'}`;
 
-    // Calculate net amount for filtered view
     let net = 0;
     txns.forEach((t) => {
-      if (t.type === 'Income') net += t.amount;
-      else net -= t.amount;
+      if (t.type === 'Income') net += Number(t.amount);
+      else net -= Number(t.amount);
     });
 
     dom.txnsNetBadge.textContent = `Net: ${net >= 0 ? '+' : '-'}${state.currency}${formatMoney(Math.abs(net))}`;
@@ -546,14 +656,13 @@
       container.appendChild(card);
     });
 
-    // Bind edit and delete buttons
     container.querySelectorAll('.edit-txn').forEach((btn) => {
-      btn.addEventListener('click', () => openEditTransactionModal(Number(btn.dataset.id)));
+      btn.addEventListener('click', () => openEditTransactionModal(btn.dataset.id));
     });
 
     container.querySelectorAll('.delete-txn').forEach((btn) => {
       btn.addEventListener('click', () => {
-        confirmDelete('transaction', Number(btn.dataset.id), `Transaction "${btn.dataset.desc}"`);
+        confirmDelete('transaction', btn.dataset.id, `Transaction "${btn.dataset.desc}"`);
       });
     });
   }
@@ -563,9 +672,10 @@
   // ==========================================
 
   async function loadBudgets() {
+    if (!state.user) return;
     try {
       const monthParam = state.currentMonth ? `?month=${state.currentMonth}` : '';
-      const res = await fetch(`/api/budgets${monthParam}`);
+      const res = await apiFetch(`/api/budgets${monthParam}`);
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
 
@@ -651,7 +761,7 @@
 
     container.querySelectorAll('.delete-budget').forEach((btn) => {
       btn.addEventListener('click', () => {
-        confirmDelete('budget', Number(btn.dataset.id), `Budget for ${btn.dataset.cat}`);
+        confirmDelete('budget', btn.dataset.id, `Budget for ${btn.dataset.cat}`);
       });
     });
   }
@@ -661,9 +771,10 @@
   // ==========================================
 
   async function loadGoals() {
+    if (!state.user) return;
     try {
       const monthParam = state.currentMonth ? `?month=${state.currentMonth}` : '';
-      const res = await fetch(`/api/goals${monthParam}`);
+      const res = await apiFetch(`/api/goals${monthParam}`);
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
 
@@ -681,7 +792,7 @@
     if (!goals || goals.length === 0) {
       container.innerHTML = `
         <div class="empty-state-sm" style="grid-column: 1 / -1;">
-          No savings goals yet! Pick a preset above or tap <strong>+ Create Savings Goal</strong> to start saving for a Laptop, Trip, or Phone!
+          No savings goals yet! Pick a preset above or tap <strong>+ Create Savings Goal</strong> to start saving!
         </div>
       `;
       return;
@@ -729,7 +840,6 @@
       container.appendChild(card);
     });
 
-    // Bind deposit, edit, delete
     container.querySelectorAll('.deposit-goal-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         dom.depositGoalId.value = btn.dataset.id;
@@ -741,7 +851,7 @@
 
     container.querySelectorAll('.edit-goal-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const goal = goals.find((item) => item.id === Number(btn.dataset.id));
+        const goal = goals.find((item) => String(item.id) === String(btn.dataset.id));
         if (!goal) return;
         dom.goalEditId.value = goal.id;
         dom.goalName.value = goal.name;
@@ -755,7 +865,7 @@
 
     container.querySelectorAll('.delete-goal-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
-        confirmDelete('goal', Number(btn.dataset.id), `Savings Goal "${btn.dataset.name}"`);
+        confirmDelete('goal', btn.dataset.id, `Savings Goal "${btn.dataset.name}"`);
       });
     });
   }
@@ -765,25 +875,23 @@
   // ==========================================
 
   async function loadInsights() {
+    if (!state.user) return;
     try {
       const monthParam = state.currentMonth ? `?month=${state.currentMonth}` : '';
-      const res = await fetch(`/api/insights${monthParam}`);
+      const res = await apiFetch(`/api/insights${monthParam}`);
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
 
       const d = json.data;
 
-      // 1. Biggest Expense
       dom.insightTopCatName.textContent = d.biggest_expense.category;
       dom.insightTopCatAmt.textContent = formatMoney(d.biggest_expense.amount);
       dom.insightTopCatPct.textContent = `${d.biggest_expense.percentage}% of expenses`;
       dom.insightTopCatIcon.textContent = d.biggest_expense.emoji || '🍔';
 
-      // 2. Average Daily Spending
       dom.insightDailyAvg.textContent = formatMoney(d.avg_daily_spending);
       dom.insightDaysElapsed.textContent = `Across ${d.days_elapsed} days in month`;
 
-      // 3. Savings Rate
       dom.insightSavingsRate.textContent = `${d.savings_rate}%`;
       if (d.savings_rate >= 30) {
         dom.insightSavingsEval.className = 'metric-pill pill-success';
@@ -796,12 +904,10 @@
         dom.insightSavingsEval.textContent = 'Negative cash flow ⚠️';
       }
 
-      // 4. Highest Spending Day
       dom.insightPeakDay.textContent = d.highest_spending_day.date || 'N/A';
       dom.insightPeakAmt.textContent = formatMoney(d.highest_spending_day.amount);
       dom.insightPeakItem.textContent = d.highest_spending_day.top_item || 'No spend';
 
-      // 5. Month Comparison
       const comp = d.month_comparison;
       dom.comparisonMessage.textContent = comp.message;
       dom.comparisonPrevVal.textContent = `${state.currency}${formatMoney(comp.previous_month_expenses)}`;
@@ -812,12 +918,8 @@
       dom.comparisonPrevBar.style.width = `${(comp.previous_month_expenses / maxExp) * 100}%`;
       dom.comparisonCurrBar.style.width = `${(comp.current_month_expenses / maxExp) * 100}%`;
 
-      // 6. Spending Trends Chart
       renderSpendingTrendsChart(d.spending_trends);
-
-      // 7. Student Money Tips
       renderStudentTips(d.student_tips);
-
       updateCurrencyLabels();
     } catch (err) {
       console.error('Error loading insights:', err);
@@ -876,8 +978,9 @@
   // ==========================================
 
   async function syncAffordBalance() {
+    if (!state.user) return;
     try {
-      const res = await fetch('/api/dashboard');
+      const res = await apiFetch('/api/dashboard');
       const json = await res.json();
       if (json.success) {
         dom.affordBalance.value = json.data.current_balance;
@@ -899,7 +1002,7 @@
     }
 
     try {
-      const res = await fetch('/api/afford', {
+      const res = await apiFetch('/api/afford', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -914,7 +1017,6 @@
 
       const d = json.data;
 
-      // Render Verdict
       dom.affordIdleState.style.display = 'none';
       dom.affordVerdictContent.style.display = 'block';
 
@@ -966,7 +1068,7 @@
       const url = editId ? `/api/transactions/${editId}` : '/api/transactions';
       const method = editId ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -979,7 +1081,6 @@
       closeModal(dom.modalTransaction);
       dom.txnForm.reset();
 
-      // Refresh data
       loadDashboard();
       if (state.activeTab === 'transactions') loadTransactions();
       if (state.activeTab === 'budgets') loadBudgets();
@@ -1004,7 +1105,7 @@
     }
 
     try {
-      const res = await fetch('/api/budgets', {
+      const res = await apiFetch('/api/budgets', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -1044,7 +1145,7 @@
       const url = editId ? `/api/goals/${editId}` : '/api/goals';
       const method = editId ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -1072,7 +1173,7 @@
     }
 
     try {
-      const res = await fetch(`/api/goals/${goalId}/deposit`, {
+      const res = await apiFetch(`/api/goals/${goalId}/deposit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount }),
@@ -1105,7 +1206,7 @@
       else if (type === 'budget') url = `/api/budgets/${id}`;
       else if (type === 'goal') url = `/api/goals/${id}`;
 
-      const res = await fetch(url, { method: 'DELETE' });
+      const res = await apiFetch(url, { method: 'DELETE' });
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
 
@@ -1113,7 +1214,6 @@
       closeModal(dom.modalDelete);
       state.pendingDelete = null;
 
-      // Reload appropriate views
       loadDashboard();
       if (type === 'transaction') loadTransactions();
       if (type === 'budget') loadBudgets();
@@ -1124,10 +1224,9 @@
     }
   }
 
-  // Edit Transaction Helper
   async function openEditTransactionModal(id) {
     try {
-      const res = await fetch(`/api/transactions/${id}`);
+      const res = await apiFetch(`/api/transactions/${id}`);
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
 
@@ -1135,7 +1234,6 @@
       dom.txnEditId.value = t.id;
       dom.modalTxnTitle.textContent = 'Edit Transaction';
 
-      // Set type toggle
       dom.formTypeSelector.querySelectorAll('.segment-btn').forEach((btn) => {
         btn.classList.toggle('active', btn.dataset.type === t.type);
       });
@@ -1159,13 +1257,11 @@
     dom.modalTxnTitle.textContent = 'Add Transaction';
     dom.txnForm.reset();
 
-    // Default to Expense
     dom.formTypeSelector.querySelectorAll('.segment-btn').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.type === 'Expense');
     });
     updateFormCategories('Expense');
 
-    // Default date to today
     const today = new Date().toISOString().split('T')[0];
     dom.txnDate.value = today;
 
@@ -1187,6 +1283,91 @@
   // ==========================================
 
   function bindEvents() {
+    // 1. Auth Switcher (Log In vs Create Account)
+    if (dom.authToggle) {
+      dom.authToggle.querySelectorAll('.segment-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          dom.authToggle.querySelectorAll('.segment-btn').forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+          const mode = btn.dataset.mode;
+          showAuthError('');
+          if (mode === 'login') {
+            dom.formLogin.style.display = 'flex';
+            dom.formSignup.style.display = 'none';
+          } else {
+            dom.formLogin.style.display = 'none';
+            dom.formSignup.style.display = 'flex';
+          }
+        });
+      });
+    }
+
+    // 2. Login Form Submit
+    if (dom.formLogin) {
+      dom.formLogin.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        showAuthError('');
+        const email = dom.loginEmail.value.trim();
+        const password = dom.loginPassword.value;
+
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password }),
+          });
+          const json = await res.json();
+          if (!json.success) throw new Error(json.error || 'Login failed.');
+
+          const user = json.data.user;
+          const token = json.data.session ? json.data.session.access_token : '';
+          setLoggedInState(user, token);
+          showToast(`Welcome back, ${user.name || 'Student'}!`, 'success');
+        } catch (err) {
+          showAuthError(err.message);
+        }
+      });
+    }
+
+    // 3. Signup Form Submit
+    if (dom.formSignup) {
+      dom.formSignup.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        showAuthError('');
+        const name = dom.signupName.value.trim();
+        const email = dom.signupEmail.value.trim();
+        const password = dom.signupPassword.value;
+
+        try {
+          const res = await fetch('/api/auth/signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, email, password }),
+          });
+          const json = await res.json();
+          if (!json.success) throw new Error(json.error || 'Signup failed.');
+
+          const user = json.data.user;
+          const token = json.data.session ? json.data.session.access_token : '';
+          setLoggedInState(user, token);
+          showToast('Account created successfully! Welcome to MONEYY.', 'success');
+        } catch (err) {
+          showAuthError(err.message);
+        }
+      });
+    }
+
+    // 4. Logout Button
+    if (dom.btnLogout) {
+      dom.btnLogout.addEventListener('click', async () => {
+        try {
+          await fetch('/api/auth/logout', { method: 'POST' });
+        } catch (e) {}
+        setLoggedOutState();
+        showToast('Logged out safely.', 'info');
+      });
+    }
+
     // Navigation Tabs (Desktop & Mobile)
     dom.navTabs.forEach((tab) => {
       tab.addEventListener('click', () => switchTab(tab.dataset.tab));
@@ -1196,7 +1377,9 @@
       tab.addEventListener('click', () => switchTab(tab.dataset.tab));
     });
 
-    dom.logoHomeBtn.addEventListener('click', () => switchTab('dashboard'));
+    dom.logoHomeBtn.addEventListener('click', () => {
+      if (state.user) switchTab('dashboard');
+    });
     dom.dashViewBudgetsBtn.addEventListener('click', () => switchTab('budgets'));
     dom.dashViewAllTxnsBtn.addEventListener('click', () => switchTab('transactions'));
     dom.dashQuickAffordBtn.addEventListener('click', () => switchTab('afford'));
@@ -1245,7 +1428,7 @@
     dom.reloadDemoBtn.addEventListener('click', async () => {
       dom.settingsDropdown.classList.remove('show');
       try {
-        const res = await fetch('/api/demo/seed', { method: 'POST' });
+        const res = await apiFetch('/api/demo/seed', { method: 'POST' });
         const json = await res.json();
         showToast(json.message, 'success');
         loadDashboard();
@@ -1260,9 +1443,9 @@
 
     dom.clearAllBtn.addEventListener('click', async () => {
       dom.settingsDropdown.classList.remove('show');
-      if (!confirm('Are you sure you want to clear all transactions, budgets, and goals?')) return;
+      if (!confirm('Are you sure you want to clear all your transactions, budgets, and goals?')) return;
       try {
-        const res = await fetch('/api/demo/clear', { method: 'POST' });
+        const res = await apiFetch('/api/demo/clear', { method: 'POST' });
         const json = await res.json();
         showToast(json.message, 'success');
         loadDashboard();
@@ -1283,7 +1466,6 @@
       });
     });
 
-    // Close on backdrop click
     document.querySelectorAll('.modal-backdrop').forEach((backdrop) => {
       backdrop.addEventListener('click', (e) => {
         if (e.target === backdrop) closeModal(backdrop);
@@ -1406,10 +1588,9 @@
     updateCurrencyLabels();
     await fetchMetadata();
     bindEvents();
-    loadDashboard();
+    await checkAuthSession();
   }
 
-  // Run on DOM loaded
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
   } else {

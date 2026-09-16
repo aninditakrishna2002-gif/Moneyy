@@ -2,13 +2,14 @@
 finance_engine.py - Core Financial Logic & Calculation Engine for MONEYY
 Tagline: "Your money. Your choices."
 Pure Python financial formulas, budget alerts, savings projections, and insights.
+Operates on Supabase PostgreSQL user data with strict user isolation.
 """
 
 from datetime import datetime, date
 import calendar
 import math
 from typing import Dict, Any, List, Optional
-import database as db
+import supabase_db as sdb
 
 # Standard App Categories & Payment Methods
 INCOME_CATEGORIES = [
@@ -83,9 +84,13 @@ def get_previous_month_str(month_str: str) -> str:
     return f"{year:04d}-{month:02d}"
 
 
-def calculate_dashboard_summary(month: Optional[str] = None, db_path: str = db.DB_PATH) -> Dict[str, Any]:
+def calculate_dashboard_summary(
+    user_id: str,
+    month: Optional[str] = None,
+    access_token: Optional[str] = None,
+) -> Dict[str, Any]:
     """
-    Computes all high-level figures:
+    Computes all high-level figures for the specified user:
     - Current balance (all-time income - all-time expenses)
     - Monthly income (for selected month)
     - Monthly expenses (for selected month)
@@ -98,17 +103,17 @@ def calculate_dashboard_summary(month: Optional[str] = None, db_path: str = db.D
     if not month or month == "All":
         month = get_current_month_str()
 
-    all_transactions = db.get_all_time_transactions(db_path=db_path)
+    all_transactions = sdb.get_all_time_transactions(user_id=user_id, access_token=access_token)
 
     # 1. Total All-time Balance
-    total_all_income = sum(t["amount"] for t in all_transactions if t["type"] == "Income")
-    total_all_expense = sum(t["amount"] for t in all_transactions if t["type"] == "Expense")
+    total_all_income = sum(float(t["amount"]) for t in all_transactions if t["type"] == "Income")
+    total_all_expense = sum(float(t["amount"]) for t in all_transactions if t["type"] == "Expense")
     current_balance = round(total_all_income - total_all_expense, 2)
 
     # 2. Monthly Stats
-    month_transactions = [t for t in all_transactions if t["date"][:7] == month]
-    monthly_income = round(sum(t["amount"] for t in month_transactions if t["type"] == "Income"), 2)
-    monthly_expenses = round(sum(t["amount"] for t in month_transactions if t["type"] == "Expense"), 2)
+    month_transactions = [t for t in all_transactions if str(t["date"])[:7] == month]
+    monthly_income = round(sum(float(t["amount"]) for t in month_transactions if t["type"] == "Income"), 2)
+    monthly_expenses = round(sum(float(t["amount"]) for t in month_transactions if t["type"] == "Expense"), 2)
     monthly_savings = round(monthly_income - monthly_expenses, 2)
 
     if monthly_income > 0:
@@ -121,7 +126,7 @@ def calculate_dashboard_summary(month: Optional[str] = None, db_path: str = db.D
     for t in month_transactions:
         if t["type"] == "Expense":
             cat = t["category"]
-            breakdown_map[cat] = breakdown_map.get(cat, 0.0) + t["amount"]
+            breakdown_map[cat] = breakdown_map.get(cat, 0.0) + float(t["amount"])
 
     spending_breakdown = []
     for cat, amt in sorted(breakdown_map.items(), key=lambda item: item[1], reverse=True):
@@ -180,7 +185,6 @@ def generate_quick_insight(
         }
 
     if savings_pct >= 40:
-        top_cat = breakdown[0]["category"] if breakdown else "your spend"
         return {
             "title": "Your wallet is looking healthy 👀",
             "message": f"You're saving {savings_pct}% of your money this month! Way ahead of the student curve.",
@@ -203,28 +207,32 @@ def generate_quick_insight(
     }
 
 
-def calculate_budgets_status(month: Optional[str] = None, db_path: str = db.DB_PATH) -> Dict[str, Any]:
+def calculate_budgets_status(
+    user_id: str,
+    month: Optional[str] = None,
+    access_token: Optional[str] = None,
+) -> Dict[str, Any]:
     """
-    Computes overall budget and per-category budget statuses, used/remaining amounts,
-    and alert thresholds (healthy, warning >= 80%, exceeded >= 100%).
+    Computes overall budget and per-category budget statuses for the user,
+    used/remaining amounts, and alert thresholds (healthy, warning >= 80%, exceeded >= 100%).
     """
     if not month or month == "All":
         month = get_current_month_str()
 
-    month_transactions = db.get_transactions(trans_type="Expense", month=month, db_path=db_path)
-    total_spent = sum(t["amount"] for t in month_transactions)
+    month_transactions = sdb.get_transactions(user_id=user_id, trans_type="Expense", month=month, access_token=access_token)
+    total_spent = sum(float(t["amount"]) for t in month_transactions)
 
     cat_spending: Dict[str, float] = {}
     for t in month_transactions:
         c = t["category"]
-        cat_spending[c] = cat_spending.get(c, 0.0) + t["amount"]
+        cat_spending[c] = cat_spending.get(c, 0.0) + float(t["amount"])
 
-    budgets_list = db.get_budgets(db_path=db_path)
+    budgets_list = sdb.get_budgets(user_id=user_id, access_token=access_token)
 
     overall_budget_entry = next((b for b in budgets_list if b["category"] == "Overall"), None)
     overall_budget = None
     if overall_budget_entry:
-        b_amt = overall_budget_entry["monthly_amount"]
+        b_amt = float(overall_budget_entry["monthly_amount"])
         spent = total_spent
         remaining = round(b_amt - spent, 2)
         pct = round((spent / b_amt) * 100, 1) if b_amt > 0 else 0.0
@@ -240,7 +248,7 @@ def calculate_budgets_status(month: Optional[str] = None, db_path: str = db.DB_P
             warning_msg = f"Looking good! ₹{remaining:,.2f} remaining."
 
         overall_budget = {
-            "id": overall_budget_entry["id"],
+            "id": str(overall_budget_entry["id"]),
             "budget_amount": b_amt,
             "spent": round(spent, 2),
             "remaining": remaining,
@@ -254,7 +262,7 @@ def calculate_budgets_status(month: Optional[str] = None, db_path: str = db.DB_P
         if b["category"] == "Overall":
             continue
         c = b["category"]
-        b_amt = b["monthly_amount"]
+        b_amt = float(b["monthly_amount"])
         spent = cat_spending.get(c, 0.0)
         remaining = round(b_amt - spent, 2)
         pct = round((spent / b_amt) * 100, 1) if b_amt > 0 else 0.0
@@ -270,7 +278,7 @@ def calculate_budgets_status(month: Optional[str] = None, db_path: str = db.DB_P
             warning_msg = f"Safe: ₹{remaining:,.2f} remaining."
 
         category_budgets.append({
-            "id": b["id"],
+            "id": str(b["id"]),
             "category": c,
             "emoji": CATEGORY_EMOJIS.get(c, "🏷️"),
             "budget_amount": b_amt,
@@ -289,23 +297,26 @@ def calculate_budgets_status(month: Optional[str] = None, db_path: str = db.DB_P
     }
 
 
-def calculate_savings_goals_summary(month: Optional[str] = None, db_path: str = db.DB_PATH) -> List[Dict[str, Any]]:
+def calculate_savings_goals_summary(
+    user_id: str,
+    month: Optional[str] = None,
+    access_token: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     """
-    Calculates progress, remaining balance, and estimated completion time for all savings goals.
+    Calculates progress, remaining balance, and estimated completion time for all user savings goals.
     """
     if not month or month == "All":
         month = get_current_month_str()
 
-    # Get current monthly savings to estimate completion time
-    dash = calculate_dashboard_summary(month=month, db_path=db_path)
+    dash = calculate_dashboard_summary(user_id=user_id, month=month, access_token=access_token)
     est_monthly_savings = max(0.0, dash["monthly_savings"])
 
-    goals = db.get_savings_goals(db_path=db_path)
+    goals = sdb.get_savings_goals(user_id=user_id, access_token=access_token)
     results = []
 
     for g in goals:
-        target = g["target_amount"]
-        saved = g["saved_amount"]
+        target = float(g["target_amount"])
+        saved = float(g["saved_amount"])
         remaining = round(max(0.0, target - saved), 2)
         progress_pct = round((saved / target) * 100, 1) if target > 0 else 0.0
 
@@ -331,12 +342,12 @@ def calculate_savings_goals_summary(month: Optional[str] = None, db_path: str = 
             "Trip": "🏖️",
             "Emergency Fund": "🛡️",
             "Phone": "📱",
-        }.get(g["category_type"], "🎯")
+        }.get(g.get("category_type"), "🎯")
 
         results.append({
-            "id": g["id"],
+            "id": str(g["id"]),
             "name": g["name"],
-            "category_type": g["category_type"],
+            "category_type": g.get("category_type", "Custom"),
             "icon": icon,
             "target_amount": target,
             "saved_amount": saved,
@@ -349,9 +360,13 @@ def calculate_savings_goals_summary(month: Optional[str] = None, db_path: str = 
     return results
 
 
-def calculate_deep_insights(month: Optional[str] = None, db_path: str = db.DB_PATH) -> Dict[str, Any]:
+def calculate_deep_insights(
+    user_id: str,
+    month: Optional[str] = None,
+    access_token: Optional[str] = None,
+) -> Dict[str, Any]:
     """
-    Automatically computes detailed financial insights based on the user's transactions:
+    Computes detailed financial insights based on the user's transactions:
     - Biggest expense category (name, amount, %)
     - Average daily spending
     - Savings rate (%)
@@ -365,22 +380,22 @@ def calculate_deep_insights(month: Optional[str] = None, db_path: str = db.DB_PA
 
     prev_month = get_previous_month_str(month)
 
-    all_transactions = db.get_all_time_transactions(db_path=db_path)
-    curr_txns = [t for t in all_transactions if t["date"][:7] == month]
-    prev_txns = [t for t in all_transactions if t["date"][:7] == prev_month]
+    all_transactions = sdb.get_all_time_transactions(user_id=user_id, access_token=access_token)
+    curr_txns = [t for t in all_transactions if str(t["date"])[:7] == month]
+    prev_txns = [t for t in all_transactions if str(t["date"])[:7] == prev_month]
 
-    curr_income = sum(t["amount"] for t in curr_txns if t["type"] == "Income")
-    curr_expenses = sum(t["amount"] for t in curr_txns if t["type"] == "Expense")
+    curr_income = sum(float(t["amount"]) for t in curr_txns if t["type"] == "Income")
+    curr_expenses = sum(float(t["amount"]) for t in curr_txns if t["type"] == "Expense")
     curr_savings = curr_income - curr_expenses
 
-    prev_expenses = sum(t["amount"] for t in prev_txns if t["type"] == "Expense")
+    prev_expenses = sum(float(t["amount"]) for t in prev_txns if t["type"] == "Expense")
 
     # 1. Biggest Expense Category
     expense_breakdown: Dict[str, float] = {}
     for t in curr_txns:
         if t["type"] == "Expense":
             c = t["category"]
-            expense_breakdown[c] = expense_breakdown.get(c, 0.0) + t["amount"]
+            expense_breakdown[c] = expense_breakdown.get(c, 0.0) + float(t["amount"])
 
     if expense_breakdown and curr_expenses > 0:
         biggest_cat = max(expense_breakdown, key=expense_breakdown.get)
@@ -420,10 +435,7 @@ def calculate_deep_insights(month: Optional[str] = None, db_path: str = db.DB_PA
 
     # 4. Spending Compared with Previous Month
     diff_amount = round(curr_expenses - prev_expenses, 2)
-    if prev_expenses > 0:
-        pct_change = round(((curr_expenses - prev_expenses) / prev_expenses) * 100, 1)
-    else:
-        pct_change = 0.0
+    pct_change = round(((curr_expenses - prev_expenses) / prev_expenses) * 100, 1) if prev_expenses > 0 else 0.0
 
     if prev_expenses == 0 and curr_expenses == 0:
         month_comparison_text = "No previous month data to compare."
@@ -443,9 +455,10 @@ def calculate_deep_insights(month: Optional[str] = None, db_path: str = db.DB_PA
     day_top_item: Dict[str, Dict[str, Any]] = {}
     for t in curr_txns:
         if t["type"] == "Expense":
-            d_str = t["date"]
-            daily_spend_map[d_str] = daily_spend_map.get(d_str, 0.0) + t["amount"]
-            if d_str not in day_top_item or t["amount"] > day_top_item[d_str]["amount"]:
+            d_str = str(t["date"])
+            amt = float(t["amount"])
+            daily_spend_map[d_str] = daily_spend_map.get(d_str, 0.0) + amt
+            if d_str not in day_top_item or amt > float(day_top_item[d_str]["amount"]):
                 day_top_item[d_str] = t
 
     if daily_spend_map:
@@ -464,8 +477,7 @@ def calculate_deep_insights(month: Optional[str] = None, db_path: str = db.DB_PA
             "top_item": "No expenses recorded",
         }
 
-    # 6. Spending Trends (Daily breakdown for chart)
-    # Sorted list of dates in the month with spending
+    # 6. Spending Trends
     spending_trends = []
     for d_str in sorted(daily_spend_map.keys()):
         spending_trends.append({
@@ -554,11 +566,12 @@ def evaluate_affordability(
     item_name: str,
     price: float,
     current_balance: Optional[float] = None,
-    db_path: str = db.DB_PATH,
+    user_id: Optional[str] = None,
+    access_token: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Evaluates whether a student can afford a purchase:
-    Input: item_name, price, current_balance (auto-calculated from database if None)
+    Input: item_name, price, current_balance (auto-calculated from user's transactions if None)
     Output:
     - remaining_balance
     - result: "Looks Good", "Think Twice", or "Not Recommended"
@@ -569,9 +582,11 @@ def evaluate_affordability(
         raise ValueError("Price must be greater than 0")
 
     if current_balance is None:
-        # Calculate real current balance from DB
-        summary = calculate_dashboard_summary(db_path=db_path)
-        current_balance = summary["current_balance"]
+        if user_id:
+            summary = calculate_dashboard_summary(user_id=user_id, access_token=access_token)
+            current_balance = summary["current_balance"]
+        else:
+            current_balance = 0.0
 
     remaining_balance = round(current_balance - price, 2)
     name = item_name.strip() if item_name and item_name.strip() else "This item"
