@@ -1935,7 +1935,7 @@ body {
 
 /* Mobile Bottom Navigation (Hidden on desktop) */
 .mobile-bottom-nav {
-  display: none;
+  display: none !important;
   position: fixed;
   bottom: 0;
   left: 0;
@@ -2305,10 +2305,307 @@ body {
 }
 
 /* ==========================================================================
-   RESPONSIVE MEDIA QUERIES (Tablets & Mobile)
+   RESPONSIVE MEDIA QUERIES
    ========================================================================== */
 
-/* 1. Dedicated Tablet & iPad Responsive Layout (768px to 1100px) */
+/* Guard: Ensure mobile elements never appear on tablet or desktop screens */
+@media (min-width: 768px) {
+  .mobile-bottom-nav,
+  .mobile-menu-toggle,
+  .mobile-nav-drawer {
+    display: none !important;
+  }
+}
+
+/* 1. Dedicated Desktop & Laptop Responsive Layout (> 1100px) */
+@media (min-width: 1101px) {
+  /* Prevent horizontal overflow on all desktop viewports */
+  html, body, .app-shell {
+    overflow-x: hidden !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+  }
+
+  /* Desktop Top Navigation Base: Aligns with 1400px centered content area */
+  .top-nav {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 100 !important;
+    padding-left: max(clamp(1.25rem, 2.5vw, 2.5rem), calc((100% - 1400px) / 2 + clamp(1.25rem, 2.5vw, 2.5rem))) !important;
+    padding-right: max(clamp(1.25rem, 2.5vw, 2.5rem), calc((100% - 1400px) / 2 + clamp(1.25rem, 2.5vw, 2.5rem))) !important;
+  }
+
+  /* Right-side controls container */
+  .nav-actions {
+    display: flex !important;
+    align-items: center !important;
+    flex-shrink: 0 !important;
+  }
+
+  .nav-actions .auth-required-view {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+  }
+
+  /* Guard: Respect JavaScript display toggles */
+  .auth-guest-view[style*="display: none"] {
+    display: none !important;
+  }
+
+  .auth-required-view[style*="display: none"] {
+    display: none !important;
+  }
+
+  /* Right-side controls: Minimum usable widths, preventing squeeze or overlap */
+  #user-profile-badge {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 0.45rem !important;
+    padding: 0.35rem 0.75rem !important;
+    font-size: 0.82rem !important;
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+  }
+
+  .user-name-text {
+    max-width: 110px !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .select-wrapper {
+    flex-shrink: 0 !important;
+  }
+
+  #global-month-select {
+    min-width: 125px !important;
+    flex-shrink: 0 !important;
+  }
+
+  #global-currency-select {
+    min-width: 78px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .control-select {
+    padding: 0.45rem 1.6rem 0.45rem 0.75rem !important;
+    font-size: 0.82rem !important;
+    white-space: nowrap !important;
+  }
+
+  .dropdown-menu-wrapper {
+    flex-shrink: 0 !important;
+  }
+
+  #btn-open-add-modal {
+    padding: 0.5rem 1rem !important;
+    font-size: 0.84rem !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+  }
+
+  #btn-logout {
+    padding: 0.45rem 0.85rem !important;
+    font-size: 0.82rem !important;
+    white-space: nowrap !important;
+    flex-shrink: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+  }
+
+  /* Main Content: Responsive width with sensible 1400px ceiling */
+  .main-content {
+    flex: 1 !important;
+    width: 100% !important;
+    max-width: 1400px !important;
+    margin: 0 auto !important;
+    padding: 2rem clamp(1.25rem, 2.5vw, 2.5rem) 3.5rem !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Dashboard Cards Grid Alignment */
+  .metrics-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 1.25rem !important;
+    margin-bottom: 2rem !important;
+    align-items: stretch !important;
+  }
+
+  .metric-card {
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    height: 100% !important;
+    min-height: 145px !important;
+    box-sizing: border-box !important;
+    padding: 1.4rem !important;
+  }
+
+  .dashboard-details-grid {
+    display: grid !important;
+    grid-template-columns: 1.15fr 0.85fr !important;
+    gap: 1.5rem !important;
+    align-items: stretch !important;
+  }
+
+  .dashboard-details-grid > .surface-card {
+    height: 100% !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+
+  /* Transactions Toolbar Alignment */
+  .toolbar-card {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    gap: 1rem !important;
+  }
+
+  .search-input-wrapper {
+    flex: 1 1 auto !important;
+    min-width: 240px !important;
+  }
+
+  .toolbar-filters {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    gap: 0.75rem !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Budgets & Goals Grid Consistency */
+  .category-budgets-grid,
+  .goals-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 1.25rem !important;
+  }
+
+  .cat-budget-card,
+  .goal-card {
+    height: 100% !important;
+    box-sizing: border-box !important;
+  }
+}
+
+/* ==========================================================================
+   PERMANENT TWO-ROW HEADER FOR ALL DESKTOP & LAPTOP SCREENS (> 1100px)
+   ROW 1: Brand on Left, Action Controls on Right (vertically centered, properly spaced)
+   ROW 2: All 6 Navigation Tabs Centered in Pill Segment (normal readable font)
+   NEVER merges into a single row on any viewport width (1101px to 1920px+).
+   ========================================================================== */
+@media (min-width: 1101px) {
+  .top-nav {
+    display: grid !important;
+    grid-template-columns: 1fr auto !important;
+    grid-template-areas:
+      "brand actions"
+      "nav   nav" !important;
+    row-gap: 0.85rem !important;
+    column-gap: 1.5rem !important;
+    align-items: center !important;
+    padding-top: 0.85rem !important;
+    padding-bottom: 0.85rem !important;
+  }
+
+  /* When logged out, collapse row-gap so no empty space appears below row 1 */
+  .top-nav:has(.nav-tabs[style*="display: none"]) {
+    row-gap: 0 !important;
+  }
+
+  .nav-tabs[style*="display: none"] {
+    display: none !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* ROW 1 (LEFT) — BRAND */
+  .nav-brand-container {
+    grid-area: brand !important;
+    justify-self: start !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  .brand-logo {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.75rem !important;
+    cursor: pointer !important;
+    user-select: none !important;
+  }
+
+  /* ROW 1 (RIGHT) — ACTIONS */
+  .nav-actions {
+    grid-area: actions !important;
+    justify-self: end !important;
+    display: flex !important;
+    align-items: center !important;
+  }
+
+  .nav-actions .auth-required-view {
+    display: flex !important;
+    align-items: center !important;
+    gap: clamp(0.4rem, 0.6vw, 0.75rem) !important;
+    flex-wrap: nowrap !important;
+  }
+
+  /* ROW 2 — MAIN NAVIGATION (CENTERED PILL) */
+  .nav-tabs {
+    grid-area: nav !important;
+    justify-self: center !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background-color: var(--bg-subtle) !important;
+    padding: 0.35rem 0.5rem !important;
+    border-radius: var(--radius-full) !important;
+    gap: 0.35rem !important;
+    box-sizing: border-box !important;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  }
+
+  .nav-tab {
+    flex: 0 0 auto !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0.5rem clamp(0.75rem, 1vw, 1.15rem) !important;
+    font-size: 0.88rem !important;
+    font-weight: 600 !important;
+    gap: 0.45rem !important;
+    white-space: nowrap !important;
+    border-radius: var(--radius-full) !important;
+    transition: var(--transition) !important;
+  }
+
+  .nav-tab .tab-icon {
+    font-size: 1rem !important;
+    line-height: 1 !important;
+  }
+
+  .nav-tab .tab-label {
+    display: inline !important;
+    line-height: 1 !important;
+  }
+}
+
+/* 2. Dedicated Tablet & iPad Responsive Layout (768px to 1100px) */
 @media (min-width: 768px) and (max-width: 1100px) {
   /* Prevent horizontal scroll while maximizing tablet screen width */
   html, body, .app-shell {
