@@ -65,6 +65,17 @@
     clearAllBtn: document.getElementById('btn-clear-all-data'),
     logoHomeBtn: document.getElementById('logo-home-btn'),
 
+    // Mobile Drawer Navigation Elements
+    btnMobileMenuToggle: document.getElementById('btn-mobile-menu-toggle'),
+    mobileNavDrawer: document.getElementById('mobile-nav-drawer'),
+    btnMobileDrawerClose: document.getElementById('btn-mobile-drawer-close'),
+    mobileDrawerLinks: document.querySelectorAll('.mobile-drawer-link'),
+    mobileDrawerUserName: document.getElementById('mobile-drawer-user-name'),
+    mobileCurrencySelect: document.getElementById('mobile-currency-select'),
+    btnMobileReloadDemo: document.getElementById('btn-mobile-reload-demo'),
+    btnMobileClearData: document.getElementById('btn-mobile-clear-data'),
+    btnMobileLogout: document.getElementById('btn-mobile-logout'),
+
     // Global Add Transaction Buttons
     openAddModalBtn: document.getElementById('btn-open-add-modal'),
     mobileAddModalBtn: document.getElementById('btn-mobile-add-modal'),
@@ -289,13 +300,16 @@
     // Update UI Elements
     const name = user.name || 'Student';
     if (dom.navUserName) dom.navUserName.textContent = name;
+    if (dom.mobileDrawerUserName) dom.mobileDrawerUserName.textContent = name;
     if (dom.dashWelcomeText) dom.dashWelcomeText.textContent = `Hey ${name}! Your money, decoded.`;
+    if (dom.mobileCurrencySelect) dom.mobileCurrencySelect.value = state.currency;
 
     // Show app view, hide auth screen
     if (dom.authScreen) dom.authScreen.style.display = 'none';
     if (dom.appMainView) dom.appMainView.style.display = 'block';
 
     dom.authRequiredViews.forEach((el) => {
+      if (el.id === 'mobile-nav-drawer') return; // Managed separately
       el.style.display = el.tagName === 'NAV' ? 'flex' : 'flex';
     });
     dom.authGuestViews.forEach((el) => {
@@ -315,6 +329,10 @@
     state.filterCategory = 'All';
     state.currentMonth = 'All';
     localStorage.removeItem('moneyy_token');
+
+    // Close mobile drawer
+    if (dom.mobileNavDrawer) dom.mobileNavDrawer.style.display = 'none';
+    if (dom.btnMobileMenuToggle) dom.btnMobileMenuToggle.classList.remove('active');
 
     // Clear dynamic user data containers
     if (dom.txnsListContainer) dom.txnsListContainer.innerHTML = '';
@@ -362,6 +380,10 @@
     if (!state.user) return; // Guard tab access if not authenticated
     state.activeTab = tabName;
 
+    // Close mobile drawer if open
+    if (dom.mobileNavDrawer) dom.mobileNavDrawer.style.display = 'none';
+    if (dom.btnMobileMenuToggle) dom.btnMobileMenuToggle.classList.remove('active');
+
     // Desktop nav
     dom.navTabs.forEach((tab) => {
       const match = tab.dataset.tab === tabName;
@@ -369,10 +391,17 @@
       tab.setAttribute('aria-selected', match ? 'true' : 'false');
     });
 
-    // Mobile nav
+    // Mobile bottom nav
     dom.mobileNavTabs.forEach((tab) => {
       tab.classList.toggle('active', tab.dataset.tab === tabName);
     });
+
+    // Mobile drawer nav links
+    if (dom.mobileDrawerLinks) {
+      dom.mobileDrawerLinks.forEach((tab) => {
+        tab.classList.toggle('active', tab.dataset.tab === tabName);
+      });
+    }
 
     // Tab panes
     dom.tabPanes.forEach((pane) => {
@@ -1469,6 +1498,80 @@
         if (state.activeTab === 'insights') loadInsights();
       } catch (err) {
         showToast('Failed to clear data', 'error');
+      }
+    });
+
+    // Mobile Drawer Navigation Event Listeners
+    if (dom.btnMobileMenuToggle) {
+      dom.btnMobileMenuToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!dom.mobileNavDrawer) return;
+        const isClosed = dom.mobileNavDrawer.style.display === 'none' || !dom.mobileNavDrawer.style.display;
+        dom.mobileNavDrawer.style.display = isClosed ? 'flex' : 'none';
+        dom.btnMobileMenuToggle.classList.toggle('active', isClosed);
+      });
+    }
+
+    if (dom.btnMobileDrawerClose) {
+      dom.btnMobileDrawerClose.addEventListener('click', () => {
+        if (dom.mobileNavDrawer) dom.mobileNavDrawer.style.display = 'none';
+        if (dom.btnMobileMenuToggle) dom.btnMobileMenuToggle.classList.remove('active');
+      });
+    }
+
+    if (dom.mobileDrawerLinks) {
+      dom.mobileDrawerLinks.forEach((link) => {
+        link.addEventListener('click', () => {
+          const targetTab = link.dataset.tab;
+          if (targetTab) switchTab(targetTab);
+        });
+      });
+    }
+
+    if (dom.mobileCurrencySelect) {
+      dom.mobileCurrencySelect.value = state.currency;
+      dom.mobileCurrencySelect.addEventListener('change', (e) => {
+        state.currency = e.target.value;
+        if (dom.globalCurrencySelect) dom.globalCurrencySelect.value = state.currency;
+        localStorage.setItem('moneyy_currency', state.currency);
+        updateCurrencyLabels();
+        loadDashboard();
+        if (state.activeTab === 'transactions') loadTransactions();
+        if (state.activeTab === 'budgets') loadBudgets();
+        if (state.activeTab === 'goals') loadGoals();
+        if (state.activeTab === 'insights') loadInsights();
+        if (state.activeTab === 'afford') syncAffordBalance();
+      });
+    }
+
+    if (dom.btnMobileReloadDemo) {
+      dom.btnMobileReloadDemo.addEventListener('click', () => {
+        if (dom.mobileNavDrawer) dom.mobileNavDrawer.style.display = 'none';
+        if (dom.reloadDemoBtn) dom.reloadDemoBtn.click();
+      });
+    }
+
+    if (dom.btnMobileClearData) {
+      dom.btnMobileClearData.addEventListener('click', () => {
+        if (dom.mobileNavDrawer) dom.mobileNavDrawer.style.display = 'none';
+        if (dom.clearAllBtn) dom.clearAllBtn.click();
+      });
+    }
+
+    if (dom.btnMobileLogout) {
+      dom.btnMobileLogout.addEventListener('click', () => {
+        if (dom.mobileNavDrawer) dom.mobileNavDrawer.style.display = 'none';
+        if (dom.btnLogout) dom.btnLogout.click();
+      });
+    }
+
+    // Close mobile drawer on outside click
+    document.addEventListener('click', (e) => {
+      if (dom.mobileNavDrawer && dom.mobileNavDrawer.style.display !== 'none') {
+        if (!dom.mobileNavDrawer.contains(e.target) && e.target !== dom.btnMobileMenuToggle && !dom.btnMobileMenuToggle.contains(e.target)) {
+          dom.mobileNavDrawer.style.display = 'none';
+          if (dom.btnMobileMenuToggle) dom.btnMobileMenuToggle.classList.remove('active');
+        }
       }
     });
 

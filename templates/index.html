@@ -106,6 +106,10 @@
           <button class="btn btn-outline btn-sm" id="btn-logout" title="Log Out">
             <span>Log Out</span>
           </button>
+          <!-- Mobile Menu Toggle Button (Visible only on mobile <= 768px) -->
+          <button id="btn-mobile-menu-toggle" class="btn-icon mobile-menu-toggle" title="Menu" aria-label="Toggle navigation menu">
+            <span id="mobile-menu-icon">☰</span>
+          </button>
         </div>
 
         <!-- Logged Out Indicator -->
@@ -114,6 +118,67 @@
         </div>
       </div>
     </header>
+
+    <!-- Mobile Navigation Drawer (Shown when mobile menu toggle is clicked) -->
+    <div id="mobile-nav-drawer" class="mobile-nav-drawer auth-required-view" style="display: none;">
+      <div class="mobile-drawer-header">
+        <div class="user-profile-badge">
+          <span class="user-avatar-circle">👤</span>
+          <span class="user-name-text" id="mobile-drawer-user-name">Student</span>
+        </div>
+        <button id="btn-mobile-drawer-close" class="btn-icon" title="Close menu" aria-label="Close menu">✕</button>
+      </div>
+
+      <div class="mobile-drawer-section-title">Navigation</div>
+      <div class="mobile-drawer-nav">
+        <button class="mobile-drawer-link active" data-tab="dashboard">
+          <span class="drawer-icon">🏠</span>
+          <span class="drawer-label">Dashboard</span>
+        </button>
+        <button class="mobile-drawer-link" data-tab="transactions">
+          <span class="drawer-icon">💳</span>
+          <span class="drawer-label">Transactions</span>
+        </button>
+        <button class="mobile-drawer-link" data-tab="budgets">
+          <span class="drawer-icon">📊</span>
+          <span class="drawer-label">Budgets</span>
+        </button>
+        <button class="mobile-drawer-link" data-tab="goals">
+          <span class="drawer-icon">🎯</span>
+          <span class="drawer-label">Savings Goals</span>
+        </button>
+        <button class="mobile-drawer-link" data-tab="insights">
+          <span class="drawer-icon">💡</span>
+          <span class="drawer-label">Insights</span>
+        </button>
+        <button class="mobile-drawer-link" data-tab="afford">
+          <span class="drawer-icon">🤔</span>
+          <span class="drawer-label">Can I Afford It?</span>
+        </button>
+      </div>
+
+      <div class="mobile-drawer-section-title">Preferences & Data</div>
+      <div class="mobile-drawer-actions">
+        <div class="mobile-drawer-row">
+          <span>Currency:</span>
+          <select id="mobile-currency-select" class="control-select">
+            <option value="₹" selected>₹ INR</option>
+            <option value="$">$ USD</option>
+            <option value="€">€ EUR</option>
+            <option value="£">£ GBP</option>
+          </select>
+        </div>
+        <button class="mobile-drawer-action-btn" id="btn-mobile-reload-demo">
+          <span>⚡</span> Reload Demo Data
+        </button>
+        <button class="mobile-drawer-action-btn text-danger" id="btn-mobile-clear-data">
+          <span>🗑️</span> Clear My Data
+        </button>
+        <button class="mobile-drawer-action-btn btn-logout-mobile" id="btn-mobile-logout">
+          <span>🚪</span> Log Out
+        </button>
+      </div>
+    </div>
 
     <!-- Main Container -->
     <main class="main-content">
