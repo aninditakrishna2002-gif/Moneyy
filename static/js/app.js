@@ -30,6 +30,11 @@
     transactions: [],
     dashboard: null,
     pendingDelete: null, // { type: 'transaction'|'budget'|'goal', id: string, label: string }
+    customCategories: {
+      Expense: [],
+      Income: [],
+    },
+    lastSelectedCategory: '',
   };
 
   // ==========================================
@@ -205,6 +210,20 @@
     deleteModalMessage: document.getElementById('delete-modal-message'),
     btnConfirmDelete: document.getElementById('btn-confirm-delete'),
 
+    modalCustomCategory: document.getElementById('modal-custom-category'),
+    customCategoryForm: document.getElementById('custom-category-form'),
+    newCategoryName: document.getElementById('new-category-name'),
+    categoryErrorHint: document.getElementById('category-error-hint'),
+    btnCancelAddCategory: document.getElementById('btn-cancel-add-category'),
+    btnCloseCategoryModal: document.getElementById('btn-close-category-modal'),
+    btnSubmitAddCategory: document.getElementById('btn-submit-add-category'),
+    btnDeleteActiveCustomCat: document.getElementById('btn-delete-active-custom-cat'),
+    selectedCategoryEmojiPreview: document.getElementById('selected-category-emoji-preview'),
+    customCategoryEmojiVal: document.getElementById('custom-category-emoji-val'),
+    categoryEmojiPicker: document.getElementById('category-emoji-picker'),
+    manageCustomCategoriesSection: document.getElementById('manage-custom-categories-section'),
+    customCategoriesList: document.getElementById('custom-categories-list'),
+
     toastContainer: document.getElementById('toast-container'),
   };
 
@@ -317,6 +336,7 @@
     });
 
     switchTab(state.activeTab || 'dashboard');
+    loadCustomCategories();
   }
 
   function setLoggedOutState() {
@@ -328,11 +348,14 @@
     state.filterType = 'All';
     state.filterCategory = 'All';
     state.currentMonth = 'All';
+    state.customCategories = { Expense: [], Income: [] };
+    state.lastSelectedCategory = '';
     localStorage.removeItem('moneyy_token');
 
-    // Close mobile drawer
+    // Close mobile drawer and custom category modal
     if (dom.mobileNavDrawer) dom.mobileNavDrawer.style.display = 'none';
     if (dom.btnMobileMenuToggle) dom.btnMobileMenuToggle.classList.remove('active');
+    if (dom.modalCustomCategory) closeModal(dom.modalCustomCategory);
 
     // Clear dynamic user data containers
     if (dom.txnsListContainer) dom.txnsListContainer.innerHTML = '';
@@ -467,44 +490,243 @@
     select.appendChild(allOpt);
   }
 
+  async function loadCustomCategories() {
+    if (!state.user) return;
+    try {
+      const res = await apiFetch('/api/categories');
+      const json = await res.json();
+      if (json.success && json.data) {
+        if (json.data.expense_items) {
+          state.customCategories.Expense = json.data.expense_items;
+        } else {
+          state.customCategories.Expense = (json.data.Expense || []).map((c) =>
+            typeof c === 'object' ? c : { id: c, name: c, emoji: '🏷️', type: 'Expense' }
+          );
+        }
+        if (json.data.income_items) {
+          state.customCategories.Income = json.data.income_items;
+        } else {
+          state.customCategories.Income = (json.data.Income || []).map((c) =>
+            typeof c === 'object' ? c : { id: c, name: c, emoji: '🏷️', type: 'Income' }
+          );
+        }
+      }
+    } catch (e) {
+      console.warn('Could not load custom categories:', e);
+    }
+    populateCategoryOptions();
+    const activeBtn = dom.formTypeSelector?.querySelector('.segment-btn.active');
+    const activeType = activeBtn ? activeBtn.dataset.type : 'Expense';
+    updateFormCategories(activeType);
+    checkCustomCategorySelection();
+  }
+
   function populateCategoryOptions() {
     const filterCat = dom.txnCategoryFilter;
-    filterCat.innerHTML = '<option value="All">All Categories</option>';
+    if (filterCat) {
+      filterCat.innerHTML = '<option value="All">All Categories</option>';
 
-    const allCategories = [
-      ...new Set([...state.meta.expense_categories, ...state.meta.income_categories]),
-    ];
-    allCategories.sort().forEach((cat) => {
-      const emoji = state.meta.category_emojis[cat] || '🏷️';
-      const opt = document.createElement('option');
-      opt.value = cat;
-      opt.textContent = `${emoji} ${cat}`;
-      filterCat.appendChild(opt);
-    });
+      const catMap = new Map();
+      state.meta.expense_categories.forEach((cat) => {
+        catMap.set(cat, state.meta.category_emojis[cat] || '🏷️');
+      });
+      state.meta.income_categories.forEach((cat) => {
+        catMap.set(cat, state.meta.category_emojis[cat] || '🏷️');
+      });
+      (state.customCategories?.Expense || []).forEach((c) => {
+        const name = typeof c === 'object' ? c.name : c;
+        const emoji = (typeof c === 'object' && c.emoji) ? c.emoji : '🏷️';
+        catMap.set(name, emoji);
+      });
+      (state.customCategories?.Income || []).forEach((c) => {
+        const name = typeof c === 'object' ? c.name : c;
+        const emoji = (typeof c === 'object' && c.emoji) ? c.emoji : '🏷️';
+        catMap.set(name, emoji);
+      });
+
+      Array.from(catMap.keys()).sort().forEach((cat) => {
+        const emoji = catMap.get(cat);
+        const opt = document.createElement('option');
+        opt.value = cat;
+        opt.textContent = `${emoji} ${cat}`;
+        filterCat.appendChild(opt);
+      });
+    }
 
     const budgetCat = dom.budgetCategory;
-    budgetCat.innerHTML = '<option value="Overall">🎯 Overall Monthly Budget</option>';
-    state.meta.expense_categories.forEach((cat) => {
-      const emoji = state.meta.category_emojis[cat] || '🏷️';
-      const opt = document.createElement('option');
-      opt.value = cat;
-      opt.textContent = `${emoji} ${cat}`;
-      budgetCat.appendChild(opt);
-    });
+    if (budgetCat) {
+      budgetCat.innerHTML = '<option value="Overall">🎯 Overall Monthly Budget</option>';
+      const budgetMap = new Map();
+      state.meta.expense_categories.forEach((cat) => {
+        budgetMap.set(cat, state.meta.category_emojis[cat] || '🏷️');
+      });
+      (state.customCategories?.Expense || []).forEach((c) => {
+        const name = typeof c === 'object' ? c.name : c;
+        const emoji = (typeof c === 'object' && c.emoji) ? c.emoji : '🏷️';
+        budgetMap.set(name, emoji);
+      });
+
+      Array.from(budgetMap.keys()).sort().forEach((cat) => {
+        const emoji = budgetMap.get(cat);
+        const opt = document.createElement('option');
+        opt.value = cat;
+        opt.textContent = `${emoji} ${cat}`;
+        budgetCat.appendChild(opt);
+      });
+    }
   }
 
   function updateFormCategories(type) {
     const catSelect = dom.txnCategory;
+    if (!catSelect) return;
     catSelect.innerHTML = '';
-    const list = type === 'Income' ? state.meta.income_categories : state.meta.expense_categories;
+    const defaultList = type === 'Income' ? state.meta.income_categories : state.meta.expense_categories;
+    const customList = type === 'Income' ? (state.customCategories?.Income || []) : (state.customCategories?.Expense || []);
 
-    list.forEach((cat) => {
+    // 1. Existing default categories
+    defaultList.forEach((cat) => {
       const emoji = state.meta.category_emojis[cat] || '🏷️';
       const opt = document.createElement('option');
       opt.value = cat;
       opt.textContent = `${emoji} ${cat}`;
       catSelect.appendChild(opt);
     });
+
+    // 2. Custom categories for this type only with chosen emoji
+    customList.forEach((c) => {
+      const name = typeof c === 'object' ? c.name : c;
+      const emoji = (typeof c === 'object' && c.emoji) ? c.emoji : '🏷️';
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = `${emoji} ${name}`;
+      catSelect.appendChild(opt);
+    });
+
+    // 3. Exactly ONE plus icon: "➕ Add New Category" (no duplicate +)
+    const addOpt = document.createElement('option');
+    addOpt.value = '__add_new__';
+    addOpt.textContent = '➕ Add New Category';
+    catSelect.appendChild(addOpt);
+
+    state.lastSelectedCategory = catSelect.options[0]?.value || '';
+    checkCustomCategorySelection();
+  }
+
+  function checkCustomCategorySelection() {
+    if (!dom.btnDeleteActiveCustomCat || !dom.txnCategory) return;
+    const currentVal = dom.txnCategory.value;
+    const activeBtn = dom.formTypeSelector?.querySelector('.segment-btn.active');
+    const activeType = activeBtn ? activeBtn.dataset.type : 'Expense';
+    const customList = activeType === 'Income' ? (state.customCategories?.Income || []) : (state.customCategories?.Expense || []);
+    const isCustom = customList.some((c) => (typeof c === 'object' ? c.name : c) === currentVal);
+    if (isCustom && currentVal !== '__add_new__') {
+      dom.btnDeleteActiveCustomCat.style.display = 'inline-flex';
+    } else {
+      dom.btnDeleteActiveCustomCat.style.display = 'none';
+    }
+  }
+
+  function promptDeleteCustomCategory(idOrName, name, type) {
+    const allDefaults = [...state.meta.expense_categories, ...state.meta.income_categories];
+    if (allDefaults.some((d) => d.toLowerCase() === name.toLowerCase())) {
+      showToast(`Default category "${name}" cannot be deleted.`, 'error');
+      return;
+    }
+
+    state.pendingDelete = {
+      type: 'custom_category',
+      id: idOrName,
+      name: name,
+      categoryType: type,
+    };
+
+    if (dom.deleteModalMessage) {
+      dom.deleteModalMessage.innerHTML = `Are you sure you want to delete the custom category <strong>"${name}"</strong>?<br><br><small style="color: var(--text-muted);">Existing transactions using this category will remain intact.</small>`;
+    }
+    openModal(dom.modalDelete);
+  }
+
+  function renderManageCustomCategoriesList() {
+    if (!dom.customCategoriesList || !dom.manageCustomCategoriesSection) return;
+    const activeBtn = dom.formTypeSelector?.querySelector('.segment-btn.active');
+    const activeType = activeBtn ? activeBtn.dataset.type : 'Expense';
+    const list = activeType === 'Income' ? (state.customCategories?.Income || []) : (state.customCategories?.Expense || []);
+
+    if (!list || list.length === 0) {
+      dom.manageCustomCategoriesSection.style.display = 'none';
+      dom.customCategoriesList.innerHTML = '';
+      return;
+    }
+
+    dom.manageCustomCategoriesSection.style.display = 'block';
+    dom.customCategoriesList.innerHTML = '';
+
+    list.forEach((item) => {
+      const name = typeof item === 'object' ? item.name : item;
+      const emoji = (typeof item === 'object' && item.emoji) ? item.emoji : '🏷️';
+      const id = typeof item === 'object' ? item.id : item;
+
+      const row = document.createElement('div');
+      row.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0.6rem; background: var(--bg-card); border: 1px solid var(--border-soft); border-radius: var(--radius-sm); font-size: 0.85rem;';
+
+      const left = document.createElement('span');
+      left.textContent = `${emoji} ${name}`;
+      left.style.fontWeight = '500';
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.innerHTML = '🗑️';
+      delBtn.title = `Delete "${name}"`;
+      delBtn.style.cssText = 'background: none; border: none; cursor: pointer; padding: 0.2rem 0.35rem; border-radius: 4px; font-size: 0.9rem;';
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        promptDeleteCustomCategory(id, name, activeType);
+      });
+
+      row.appendChild(left);
+      row.appendChild(delBtn);
+      dom.customCategoriesList.appendChild(row);
+    });
+  }
+
+  function openCustomCategoryModal() {
+    if (!dom.modalCustomCategory) return;
+    dom.newCategoryName.value = '';
+    if (dom.customCategoryEmojiVal) dom.customCategoryEmojiVal.value = '🏷️';
+    if (dom.selectedCategoryEmojiPreview) dom.selectedCategoryEmojiPreview.textContent = '🏷️';
+    if (dom.categoryErrorHint) {
+      dom.categoryErrorHint.textContent = '';
+      dom.categoryErrorHint.style.display = 'none';
+    }
+
+    if (dom.categoryEmojiPicker) {
+      dom.categoryEmojiPicker.querySelectorAll('.btn-emoji-choice').forEach((btn) => {
+        const isDefault = btn.dataset.emoji === '🏷️';
+        btn.classList.toggle('active', isDefault);
+        btn.style.background = isDefault ? 'rgba(124, 58, 237, 0.15)' : 'transparent';
+      });
+    }
+
+    renderManageCustomCategoriesList();
+    openModal(dom.modalCustomCategory);
+    setTimeout(() => {
+      if (dom.newCategoryName) dom.newCategoryName.focus();
+    }, 120);
+  }
+
+  function closeCustomCategoryModal() {
+    if (!dom.modalCustomCategory) return;
+    closeModal(dom.modalCustomCategory);
+    if (dom.txnCategory && dom.txnCategory.value === '__add_new__') {
+      dom.txnCategory.value = state.lastSelectedCategory || dom.txnCategory.options[0]?.value || '';
+    }
+    checkCustomCategorySelection();
+  }
+
+  function showCategoryError(msg) {
+    if (!dom.categoryErrorHint) return;
+    dom.categoryErrorHint.textContent = msg;
+    dom.categoryErrorHint.style.display = 'block';
   }
 
   // ==========================================
@@ -1107,6 +1329,11 @@
       return;
     }
 
+    if (!payload.category || payload.category === '__add_new__') {
+      showToast('Please select a valid category', 'error');
+      return;
+    }
+
     try {
       const url = editId ? `/api/transactions/${editId}` : '/api/transactions';
       const method = editId ? 'PUT' : 'POST';
@@ -1241,13 +1468,14 @@
 
   async function handleConfirmDelete() {
     if (!state.pendingDelete) return;
-    const { type, id } = state.pendingDelete;
+    const { type, id, name, categoryType } = state.pendingDelete;
 
     try {
       let url = '';
       if (type === 'transaction') url = `/api/transactions/${id}`;
       else if (type === 'budget') url = `/api/budgets/${id}`;
       else if (type === 'goal') url = `/api/goals/${id}`;
+      else if (type === 'custom_category') url = `/api/categories/${encodeURIComponent(id)}`;
 
       const res = await apiFetch(url, { method: 'DELETE' });
       const json = await res.json();
@@ -1257,11 +1485,22 @@
       closeModal(dom.modalDelete);
       state.pendingDelete = null;
 
-      loadDashboard();
-      if (type === 'transaction') loadTransactions();
-      if (type === 'budget') loadBudgets();
-      if (type === 'goal') loadGoals();
-      if (state.activeTab === 'insights') loadInsights();
+      if (type === 'custom_category') {
+        const cType = categoryType || 'Expense';
+        state.customCategories[cType] = (state.customCategories[cType] || []).filter(
+          (c) => (typeof c === 'object' ? c.id !== id && c.name !== name : c !== name)
+        );
+        populateCategoryOptions();
+        updateFormCategories(cType);
+        checkCustomCategorySelection();
+        renderManageCustomCategoriesList();
+      } else {
+        loadDashboard();
+        if (type === 'transaction') loadTransactions();
+        if (type === 'budget') loadBudgets();
+        if (type === 'goal') loadGoals();
+        if (state.activeTab === 'insights') loadInsights();
+      }
     } catch (err) {
       showToast(err.message, 'error');
     }
@@ -1597,6 +1836,131 @@
         updateFormCategories(btn.dataset.type);
       });
     });
+
+    // Category dropdown change handler (+ Add New Category)
+    if (dom.txnCategory) {
+      dom.txnCategory.addEventListener('change', () => {
+        if (dom.txnCategory.value === '__add_new__') {
+          openCustomCategoryModal();
+        } else {
+          state.lastSelectedCategory = dom.txnCategory.value;
+          checkCustomCategorySelection();
+        }
+      });
+    }
+
+    // Delete custom category button next to category select
+    if (dom.btnDeleteActiveCustomCat) {
+      dom.btnDeleteActiveCustomCat.addEventListener('click', () => {
+        const activeBtn = dom.formTypeSelector?.querySelector('.segment-btn.active');
+        const activeType = activeBtn ? activeBtn.dataset.type : 'Expense';
+        const currentVal = dom.txnCategory.value;
+        const customList = activeType === 'Income' ? (state.customCategories?.Income || []) : (state.customCategories?.Expense || []);
+        const catObj = customList.find((c) => (typeof c === 'object' ? c.name : c) === currentVal);
+        if (catObj) {
+          const id = typeof catObj === 'object' ? catObj.id : catObj;
+          const name = typeof catObj === 'object' ? catObj.name : catObj;
+          promptDeleteCustomCategory(id, name, activeType);
+        }
+      });
+    }
+
+    // Emoji picker buttons
+    if (dom.categoryEmojiPicker) {
+      dom.categoryEmojiPicker.querySelectorAll('.btn-emoji-choice').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          dom.categoryEmojiPicker.querySelectorAll('.btn-emoji-choice').forEach((b) => {
+            b.classList.remove('active');
+            b.style.background = 'transparent';
+          });
+          btn.classList.add('active');
+          btn.style.background = 'rgba(124, 58, 237, 0.15)';
+          const emoji = btn.dataset.emoji || '🏷️';
+          if (dom.customCategoryEmojiVal) dom.customCategoryEmojiVal.value = emoji;
+          if (dom.selectedCategoryEmojiPreview) dom.selectedCategoryEmojiPreview.textContent = emoji;
+        });
+      });
+    }
+
+    if (dom.btnCancelAddCategory) {
+      dom.btnCancelAddCategory.addEventListener('click', closeCustomCategoryModal);
+    }
+
+    if (dom.btnCloseCategoryModal) {
+      dom.btnCloseCategoryModal.addEventListener('click', closeCustomCategoryModal);
+    }
+
+    if (dom.customCategoryForm) {
+      dom.customCategoryForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const name = dom.newCategoryName.value.trim();
+        const activeBtn = dom.formTypeSelector?.querySelector('.segment-btn.active');
+        const activeType = activeBtn ? activeBtn.dataset.type : 'Expense';
+        const emoji = (dom.customCategoryEmojiVal?.value || '🏷️').trim() || '🏷️';
+
+        // 1. Prevent blank names
+        if (!name) {
+          showCategoryError('Please enter a category name.');
+          dom.newCategoryName.focus();
+          return;
+        }
+
+        // 2. Prevent duplicate names within the same category type (case-insensitive)
+        const defaultList = activeType === 'Income' ? state.meta.income_categories : state.meta.expense_categories;
+        const customList = activeType === 'Income' ? (state.customCategories?.Income || []) : (state.customCategories?.Expense || []);
+        const allCurrentNames = [
+          ...defaultList,
+          ...customList.map((c) => (typeof c === 'object' ? c.name : c)),
+        ];
+
+        if (allCurrentNames.some((c) => c.toLowerCase() === name.toLowerCase())) {
+          showCategoryError(`"${name}" already exists in ${activeType} categories.`);
+          dom.newCategoryName.focus();
+          return;
+        }
+
+        try {
+          if (dom.btnSubmitAddCategory) dom.btnSubmitAddCategory.disabled = true;
+
+          const res = await apiFetch('/api/categories', {
+            method: 'POST',
+            body: JSON.stringify({
+              name: name,
+              type: activeType,
+              emoji: emoji,
+            }),
+          });
+          const json = await res.json();
+          if (!json.success) throw new Error(json.error || 'Failed to add category.');
+
+          if (!state.customCategories[activeType]) {
+            state.customCategories[activeType] = [];
+          }
+          const newCatObj = {
+            id: (json.data && json.data.id) ? json.data.id : name,
+            name: name,
+            emoji: emoji,
+            type: activeType,
+          };
+          state.customCategories[activeType].push(newCatObj);
+
+          populateCategoryOptions();
+          updateFormCategories(activeType);
+
+          // Automatically select the new category
+          dom.txnCategory.value = name;
+          state.lastSelectedCategory = name;
+          checkCustomCategorySelection();
+
+          closeModal(dom.modalCustomCategory);
+          showToast(`Category "${emoji} ${name}" added!`, 'success');
+        } catch (err) {
+          showCategoryError(err.message);
+        } finally {
+          if (dom.btnSubmitAddCategory) dom.btnSubmitAddCategory.disabled = false;
+        }
+      });
+    }
 
     // Quick Amount Chips in Modal
     document.querySelectorAll('[data-quick-amount]').forEach((chip) => {

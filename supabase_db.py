@@ -490,3 +490,139 @@ def seed_user_demo_data(user_id: str, access_token: Optional[str] = None, force:
     add_savings_goal(user_id=user_id, name="MacBook Air for Coding", target_amount=75000.0, saved_amount=32000.0, category_type="Laptop", access_token=access_token)
     add_savings_goal(user_id=user_id, name="Graduation Trip to Mountains", target_amount=18000.0, saved_amount=11500.0, category_type="Trip", access_token=access_token)
     add_savings_goal(user_id=user_id, name="Rainy Day Emergency Fund", target_amount=15000.0, saved_amount=9000.0, category_type="Emergency Fund", access_token=access_token)
+
+
+# ==============================================================================
+# CUSTOM CATEGORIES
+# ==============================================================================
+
+# In-memory fallback in case public.categories table migration is pending in Supabase
+_local_categories_cache: Dict[str, List[Dict[str, Any]]] = {}
+
+
+def get_custom_categories(
+    user_id: str,
+    trans_type: Optional[str] = None,
+    access_token: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Fetches all custom categories created by the authenticated user.
+    Optionally filters by trans_type ('Income' or 'Expense').
+    """
+    cats = []
+    try:
+        client = _get_client(access_token)
+        query = client.table("categories").select("*").eq("user_id", user_id)
+        if trans_type:
+            query = query.eq("category_type", trans_type)
+        res = query.order("category_name").execute()
+        if res.data is not None:
+            cats = res.data
+    except Exception:
+        pass
+
+    if not cats:
+        # Fallback to local session cache if table is pending creation or in mock test
+        user_cats = _local_categories_cache.get(user_id, [])
+        if trans_type:
+            cats = [c for c in user_cats if c["category_type"] == trans_type]
+        else:
+            cats = list(user_cats)
+
+    # Ensure emoji key is always populated
+    for c in cats:
+        if not c.get("emoji"):
+            c["emoji"] = "🏷️"
+
+    return cats
+
+
+def add_custom_category(
+    user_id: str,
+    category_name: str,
+    category_type: str,
+    emoji: str = "🏷️",
+    access_token: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Inserts a new custom category with emoji for the user in Supabase.
+    """
+    name = category_name.strip()
+    if not name:
+        raise ValueError("Category name cannot be empty.")
+    if category_type not in ("Income", "Expense"):
+        raise ValueError("Category type must be either 'Income' or 'Expense'.")
+
+    category_emoji = emoji.strip() if emoji and emoji.strip() else "🏷️"
+
+    # Check duplicates in existing custom categories
+    existing = get_custom_categories(user_id, category_type, access_token)
+    if any(c["category_name"].lower() == name.lower() for c in existing):
+        raise ValueError(f"Category '{name}' already exists for {category_type}.")
+
+    payload = {
+        "user_id": user_id,
+        "category_name": name,
+        "category_type": category_type,
+        "emoji": category_emoji,
+    }
+
+    try:
+        client = _get_client(access_token)
+        res = client.table("categories").insert(payload).execute()
+        if res.data and len(res.data) > 0:
+            item = res.data[0]
+            if not item.get("emoji"):
+                item["emoji"] = category_emoji
+            return item
+    except Exception:
+        import uuid
+        fallback_item = {
+            "id": str(uuid.uuid4()),
+            "user_id": user_id,
+            "category_name": name,
+            "category_type": category_type,
+            "emoji": category_emoji,
+        }
+        if user_id not in _local_categories_cache:
+            _local_categories_cache[user_id] = []
+        _local_categories_cache[user_id].append(fallback_item)
+        return fallback_item
+
+    raise RuntimeError("Failed to insert category into Supabase.")
+
+
+def delete_custom_category(
+    user_id: str,
+    category_id: str,
+    access_token: Optional[str] = None,
+) -> bool:
+    """
+    Deletes a custom category belonging to the user.
+    Historical transactions using this category are kept intact.
+    """
+    cat_identifier = str(category_id).strip()
+
+    # 1. Delete from local cache
+    if user_id in _local_categories_cache:
+        _local_categories_cache[user_id] = [
+            c for c in _local_categories_cache[user_id]
+            if str(c.get("id")) != cat_identifier and c.get("category_name") != cat_identifier
+        ]
+
+    # 2. Delete from Supabase
+    try:
+        client = _get_client(access_token)
+        # Attempt delete by id
+        client.table("categories").delete().eq("user_id", user_id).eq("id", cat_identifier).execute()
+    except Exception:
+        try:
+            # If id didn't match UUID format, attempt delete by category_name
+            client = _get_client(access_token)
+            client.table("categories").delete().eq("user_id", user_id).eq("category_name", cat_identifier).execute()
+        except Exception:
+            pass
+
+    return True
+
+

@@ -556,6 +556,116 @@ def api_meta():
     })
 
 
+# ==============================================================================
+# CUSTOM CATEGORIES API (PROTECTED)
+# ==============================================================================
+
+@app.route("/api/categories", methods=["GET"])
+@auth_required
+def api_get_categories():
+    """Retrieves custom categories created by the authenticated user."""
+    try:
+        cats = sdb.get_custom_categories(
+            user_id=request.user["id"],
+            access_token=request.access_token,
+        )
+        expense_names = [c["category_name"] for c in cats if c.get("category_type") == "Expense"]
+        income_names = [c["category_name"] for c in cats if c.get("category_type") == "Income"]
+        expense_items = [
+            {"id": str(c.get("id")), "name": c["category_name"], "emoji": c.get("emoji", "🏷️"), "type": "Expense"}
+            for c in cats if c.get("category_type") == "Expense"
+        ]
+        income_items = [
+            {"id": str(c.get("id")), "name": c["category_name"], "emoji": c.get("emoji", "🏷️"), "type": "Income"}
+            for c in cats if c.get("category_type") == "Income"
+        ]
+        return jsonify({
+            "success": True,
+            "data": {
+                "Expense": expense_names,
+                "Income": income_names,
+                "expense_items": expense_items,
+                "income_items": income_items,
+                "all": cats,
+            }
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route("/api/categories", methods=["POST"])
+@auth_required
+def api_add_category():
+    """Creates a new custom category for the authenticated user."""
+    try:
+        data = request.get_json(force=True) or {}
+        name = (data.get("name") or data.get("category_name") or "").strip()
+        cat_type = (data.get("type") or data.get("category_type") or "").strip()
+        emoji = (data.get("emoji") or "🏷️").strip()
+        if not emoji:
+            emoji = "🏷️"
+
+        if not name:
+            return jsonify({"success": False, "error": "Category name is required."}), 400
+        if cat_type not in ("Income", "Expense"):
+            return jsonify({"success": False, "error": "Category type must be 'Income' or 'Expense'."}), 400
+
+        # Disallow duplicates against default categories
+        default_cats = fe.EXPENSE_CATEGORIES if cat_type == "Expense" else fe.INCOME_CATEGORIES
+        if any(d.lower() == name.lower() for d in default_cats):
+            return jsonify({
+                "success": False,
+                "error": f"'{name}' is already a default {cat_type} category."
+            }), 400
+
+        category = sdb.add_custom_category(
+            user_id=request.user["id"],
+            category_name=name,
+            category_type=cat_type,
+            emoji=emoji,
+            access_token=request.access_token,
+        )
+        if isinstance(category, dict):
+            category["name"] = category.get("category_name", name)
+            category["type"] = category.get("category_type", cat_type)
+
+        return jsonify({
+            "success": True,
+            "data": category,
+            "message": f"Custom category '{name}' added successfully.",
+        }), 201
+    except ValueError as ve:
+        return jsonify({"success": False, "error": str(ve)}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+@app.route("/api/categories/<category_id>", methods=["DELETE"])
+@auth_required
+def api_delete_category(category_id):
+    """Deletes a custom category for the authenticated user without affecting historical transactions."""
+    try:
+        cat_id = str(category_id).strip()
+        # Ensure default categories cannot be deleted
+        all_defaults = fe.EXPENSE_CATEGORIES + fe.INCOME_CATEGORIES
+        if any(d.lower() == cat_id.lower() for d in all_defaults):
+            return jsonify({"success": False, "error": "Default categories cannot be deleted."}), 400
+
+        sdb.delete_custom_category(
+            user_id=request.user["id"],
+            category_id=cat_id,
+            access_token=request.access_token,
+        )
+        return jsonify({
+            "success": True,
+            "message": "Custom category deleted successfully.",
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 400
+
+
+
+
 @app.route("/api/demo/seed", methods=["POST"])
 @auth_required
 def api_demo_seed():

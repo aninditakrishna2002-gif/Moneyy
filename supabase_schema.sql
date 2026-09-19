@@ -213,3 +213,83 @@ CREATE POLICY "Service role full access on savings_goals"
     TO service_role
     USING (true)
     WITH CHECK (true);
+
+-- ==============================================================================
+-- 4. CUSTOM CATEGORIES TABLE
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.categories (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid(),
+    category_name TEXT NOT NULL,
+    category_type TEXT NOT NULL CHECK(category_type IN ('Income', 'Expense')),
+    emoji TEXT NOT NULL DEFAULT '🏷️',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    CONSTRAINT unique_user_category_type UNIQUE (user_id, category_name, category_type)
+);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'categories' 
+        AND column_name = 'user_id'
+    ) THEN
+        ALTER TABLE public.categories 
+        ADD COLUMN user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE DEFAULT auth.uid();
+        ALTER TABLE public.categories 
+        ADD CONSTRAINT unique_user_category_type UNIQUE (user_id, category_name, category_type);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'categories' 
+        AND column_name = 'emoji'
+    ) THEN
+        ALTER TABLE public.categories 
+        ADD COLUMN emoji TEXT NOT NULL DEFAULT '🏷️';
+    END IF;
+END $$;
+
+CREATE INDEX IF NOT EXISTS idx_categories_user_type ON public.categories(user_id, category_type);
+
+GRANT ALL ON TABLE public.categories TO authenticated, service_role;
+
+ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
+
+-- ------------------------------------------------------------------------------
+-- CATEGORIES RLS
+-- ------------------------------------------------------------------------------
+DROP POLICY IF EXISTS "Users can view their own categories" ON public.categories;
+CREATE POLICY "Users can view their own categories"
+    ON public.categories FOR SELECT
+    TO authenticated
+    USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert their own categories" ON public.categories;
+CREATE POLICY "Users can insert their own categories"
+    ON public.categories FOR INSERT
+    TO authenticated
+    WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update their own categories" ON public.categories;
+CREATE POLICY "Users can update their own categories"
+    ON public.categories FOR UPDATE
+    TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can delete their own categories" ON public.categories;
+CREATE POLICY "Users can delete their own categories"
+    ON public.categories FOR DELETE
+    TO authenticated
+    USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Service role full access on categories" ON public.categories;
+CREATE POLICY "Service role full access on categories"
+    ON public.categories FOR ALL
+    TO service_role
+    USING (true)
+    WITH CHECK (true);
+
